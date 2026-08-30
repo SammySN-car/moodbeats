@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Database & Environment
+*.db
+*.sqlite3
+backend/moodbeats.db
+.env
+
+# Node & Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.npm
+.vite
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
