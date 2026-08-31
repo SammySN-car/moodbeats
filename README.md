@@ -50,37 +50,37 @@ No Spotify API key required. Imports via Spotify URL, then:
 
 ```
 moodbeats-redesign/
-├── backend/
-│   ├── main.py              # FastAPI app, model pre-warming
-│   ├── config.py            # Settings (Ollama, thresholds, secrets)
-│   ├── database.py          # SQLAlchemy engine + session
-│   ├── models.py            # User, Song, Playlist, PlaylistItem
-│   ├── schemas.py           # Pydantic request/response models
-│   ├── routers/
-│   │   ├── auth.py          # Register, login, JWT
-│   │   ├── songs.py         # Import, search, artist discography, YouTube
-│   │   ├── playlists.py     # AI generation, CRUD
-│   │   └── analytics.py     # Mood distribution, stats
-│   ├── ml/
-│   │   ├── embedding_service.py    # Bi-encoder, cross-encoder, embeddings
-│   │   ├── rag_playlist_generator.py  # Hybrid search + Ollama DJ
-│   │   ├── mood_classifier.py      # Rule-based mood from audio features
-│   │   ├── lyrics_fetcher.py       # Lyrics from public API
-│   │   └── sentiment.py            # DistilBERT sentiment analysis
-│   └── utils/
-│       ├── auth.py          # Password hashing, JWT, auth dependency
-│       └── spotify.py       # Spotify URL parsing, iTunes search, audio extraction
-├── frontend/
-│   └── src/
-│       ├── App.vue          # Header, routing, bottom player
-│       ├── views/           # Login, Signup, Dashboard
-│       ├── components/      # MoodDiscover, SongLibrary, MoodAnalytics, ImportSong, BottomPlayer
-│       ├── composables/     # usePlayer (shared audio state)
-│       └── api/             # Axios client
-├── DESIGN_SYSTEM.md         # Aurora UI design tokens & component specs
-├── USER_FLOW.md             # User flow diagrams
-├── CHANGELOG.md             # Improvement tracker
-└── LICENSE                  # AGPL-3.0
+ backend/
+    main.py              # FastAPI app, model pre-warming
+    config.py            # Settings (Ollama, thresholds, secrets)
+    database.py          # SQLAlchemy engine + session
+    models.py            # User, Song, Playlist, PlaylistItem
+    schemas.py           # Pydantic request/response models
+    routers/
+       auth.py          # Register, login, JWT
+       songs.py         # Import, search, artist discography, YouTube
+       playlists.py     # AI generation, CRUD
+       analytics.py     # Mood distribution, stats
+    ml/
+       embedding_service.py    # Bi-encoder, cross-encoder, embeddings
+       rag_playlist_generator.py  # Hybrid search + Ollama DJ
+       mood_classifier.py      # Rule-based mood from audio features
+       lyrics_fetcher.py       # Lyrics from public API
+       sentiment.py            # DistilBERT sentiment analysis
+    utils/
+        auth.py          # Password hashing, JWT, auth dependency
+        spotify.py       # Spotify URL parsing, iTunes search, audio extraction
+ frontend/
+    src/
+        App.vue          # Header, routing, bottom player
+        views/           # Login, Signup, Dashboard
+        components/      # MoodDiscover, SongLibrary, MoodAnalytics, ImportSong, BottomPlayer
+        composables/     # usePlayer (shared audio state)
+        api/             # Axios client
+ DESIGN_SYSTEM.md         # Aurora UI design tokens & component specs
+ USER_FLOW.md             # User flow diagrams
+ CHANGELOG.md             # Improvement tracker
+ LICENSE                  # AGPL-3.0
 ```
 
 ---

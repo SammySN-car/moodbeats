@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 # --- Auth Schemas ---
 class UserRegister(BaseModel):
@@ -88,6 +88,9 @@ class PlaylistResponse(BaseModel):
     created_at: datetime
     items: List[PlaylistItemResponse] = Field(default_factory=list)
     new_recommendations: List[SuggestedSong] = Field(default_factory=list)
+    track_explanations: Dict[int, str] = Field(default_factory=dict)
+    quality_score: Optional[int] = None
+    quality_notes: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class MoodPromptRequest(BaseModel):

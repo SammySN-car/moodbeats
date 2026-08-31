@@ -1,12 +1,12 @@
 # MoodBeats — Complete AI Context & Architecture Source of Truth (v5.2)
 
-> **⚠️ FOR AI ASSISTANTS & DEVELOPERS**: This file is the single source of truth for the MoodBeats project.
+> ** FOR AI ASSISTANTS & DEVELOPERS**: This file is the single source of truth for the MoodBeats project.
 > Read this ENTIRE file before making any changes, refactoring code, or answering questions.
 > Designed for ANY AI coding agent (Cursor, GitHub Copilot, Gemini CLI, Claude Code, Aider, Antigravity, ChatGPT, etc.)
 
 ---
 
-## 📌 1. Project Overview & Philosophy
+##  1. Project Overview & Philosophy
 
 - **Project**: MoodBeats — Spotify-Native AI Music Mood Classifier & Database-Driven PyTorch Hybrid RAG Playlist Builder.
 - **Developer**: Samar.
@@ -27,63 +27,63 @@
 
 ---
 
-## 📁 2. Project Directory Map
+##  2. Project Directory Map
 
 ```
 moodbeats/
-├── MOODBEATS_AI_CONTEXT.md             ← THIS FILE (Complete AI context guide)
-├── ARCHITECTURE_FLOW_AND_AUDIT.md      ← System architecture & optimization audit
-├── IMPLEMENTATION_PLAN.md              ← Master implementation plan & execution record
-├── backend/
-│   ├── main.py                         ✅ PyTorch Lifespan Pre-warming + CORS + router registration
-│   ├── config.py                       ✅ Settings (50 discoveries, 35s Ollama timeout, thresholds)
-│   ├── database.py                     ✅ SQLAlchemy engine + session + PRAGMA FK listener
-│   ├── models.py                       ✅ User, Song (4 audio features, UniqueConstraint), Playlist, PlaylistItem
-│   ├── schemas.py                      ✅ Pydantic v2 schemas (SuggestedSong, SongResponse, PlaylistResponse)
-│   ├── requirements.txt                ✅ PyTorch + Transformers + rank-bm25 + Librosa
-│   ├── utils/
-│   │   ├── auth.py                     ✅ bcrypt hash, JWT create/decode, get_current_user
-│   │   └── spotify.py                  ✅ Public oEmbed + In-Memory 4-Feature Audio Extractor
-│   ├── ml/
-│   │   ├── lyrics_fetcher.py           ✅ Title-cleaning regex + lyrics.ovh API
-│   │   ├── sentiment.py                ✅ DistilBERT sentiment pipeline
-│   │   ├── mood_classifier.py          ✅ 5-mood rule classifier (happy, chill, sad, energetic, romantic)
-│   │   ├── embedding_service.py        ✅ Pure PyTorch Bi-Encoder & Cross-Encoder Neural Engine
-│   │   └── rag_playlist_generator.py   ✅ PyTorch Hybrid RAG + Cross-Encoder + Ollama AI DJ + 50-Track Dedup
-│   └── routers/
-│       ├── auth.py                     ✅ /api/auth (register, login, me)
-│       ├── songs.py                    ✅ /api/songs (search, import, list, detail, delete, artist, youtube-id)
-│       ├── playlists.py                ✅ /api/playlists (generate, create, list, delete)
-│       └── analytics.py               ✅ /api/analytics (mood-distribution, stats)
-└── frontend/
-    ├── index.html
-    ├── package.json
-    ├── vite.config.js
-    ├── README.md                       ✅ Frontend developer documentation
-    └── src/
-        ├── App.vue                     ✅ Root layout, calm top bar & global BottomPlayer mount
-        ├── main.js                     ✅ Vue app initialization & router mount
-        ├── router.js                   ✅ Route definitions & auth navigation guards
-        ├── style.css                   ✅ Full-width calm Spotify-dark design system
-        ├── api/
-        │   └── client.js               ✅ Axios instance with JWT interceptor & 401 handling
-        ├── composables/
-        │   └── usePlayer.js            ✅ Global reactive dual-stream audio state
-        ├── views/
-        │   ├── Login.vue               ✅ Centered glass auth login card
-        │   ├── Signup.vue              ✅ Account registration card
-        │   └── Dashboard.vue           ✅ Tabbed interface (Discover, Library, Search & Import, Analytics)
-        └── components/
-            ├── BottomPlayer.vue        ✅ Persistent floating bottom player with YouTube stream drawer
-            ├── ImportSong.vue          ✅ Artist Discography (50 tracks) & Track Search / URL Import
-            ├── SongLibrary.vue         ✅ Real-time search filter + Mood pills + Spotify embeds
-            ├── MoodDiscover.vue        ✅ AI DJ prompt input, liner notes, and 50-song discovery grid
-            └── MoodAnalytics.vue       ✅ KPI cards (Total Songs, Avg BPM, Energy) & Mood Doughnut Chart
+ MOODBEATS_AI_CONTEXT.md             ← THIS FILE (Complete AI context guide)
+ ARCHITECTURE_FLOW_AND_AUDIT.md      ← System architecture & optimization audit
+ IMPLEMENTATION_PLAN.md              ← Master implementation plan & execution record
+ backend/
+    main.py                          PyTorch Lifespan Pre-warming + CORS + router registration
+    config.py                        Settings (50 discoveries, 35s Ollama timeout, thresholds)
+    database.py                      SQLAlchemy engine + session + PRAGMA FK listener
+    models.py                        User, Song (4 audio features, UniqueConstraint), Playlist, PlaylistItem
+    schemas.py                       Pydantic v2 schemas (SuggestedSong, SongResponse, PlaylistResponse)
+    requirements.txt                 PyTorch + Transformers + rank-bm25 + Librosa
+    utils/
+       auth.py                      bcrypt hash, JWT create/decode, get_current_user
+       spotify.py                   Public oEmbed + In-Memory 4-Feature Audio Extractor
+    ml/
+       lyrics_fetcher.py            Title-cleaning regex + lyrics.ovh API
+       sentiment.py                 DistilBERT sentiment pipeline
+       mood_classifier.py           5-mood rule classifier (happy, chill, sad, energetic, romantic)
+       embedding_service.py         Pure PyTorch Bi-Encoder & Cross-Encoder Neural Engine
+       rag_playlist_generator.py    PyTorch Hybrid RAG + Cross-Encoder + Ollama AI DJ + 50-Track Dedup
+    routers/
+        auth.py                      /api/auth (register, login, me)
+        songs.py                     /api/songs (search, import, list, detail, delete, artist, youtube-id)
+        playlists.py                 /api/playlists (generate, create, list, delete)
+        analytics.py                /api/analytics (mood-distribution, stats)
+ frontend/
+     index.html
+     package.json
+     vite.config.js
+     README.md                        Frontend developer documentation
+     src/
+         App.vue                      Root layout, calm top bar & global BottomPlayer mount
+         main.js                      Vue app initialization & router mount
+         router.js                    Route definitions & auth navigation guards
+         style.css                    Full-width calm Spotify-dark design system
+         api/
+            client.js                Axios instance with JWT interceptor & 401 handling
+         composables/
+            usePlayer.js             Global reactive dual-stream audio state
+         views/
+            Login.vue                Centered glass auth login card
+            Signup.vue               Account registration card
+            Dashboard.vue            Tabbed interface (Discover, Library, Search & Import, Analytics)
+         components/
+             BottomPlayer.vue         Persistent floating bottom player with YouTube stream drawer
+             ImportSong.vue           Artist Discography (50 tracks) & Track Search / URL Import
+             SongLibrary.vue          Real-time search filter + Mood pills + Spotify embeds
+             MoodDiscover.vue         AI DJ prompt input, liner notes, and 50-song discovery grid
+             MoodAnalytics.vue        KPI cards (Total Songs, Avg BPM, Energy) & Mood Doughnut Chart
 ```
 
 ---
 
-## 📡 3. REST API Reference
+##  3. REST API Reference
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -101,7 +101,7 @@ moodbeats/
 
 ---
 
-## 🎧 4. Verified Dual-Stream Playback Engine
+##  4. Verified Dual-Stream Playback Engine
 
 1. **30-Second Preview Stream**:
    * Uses HTML5 `Audio(track.preview_url)` in `usePlayer.js`.
@@ -114,7 +114,7 @@ moodbeats/
 
 ---
 
-## 🛡️ 5. Zero-Duplicate Recommendation Engine
+##  5. Zero-Duplicate Recommendation Engine
 
 All outputs pass through canonical key normalization:
 

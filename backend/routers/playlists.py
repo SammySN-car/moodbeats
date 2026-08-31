@@ -10,6 +10,8 @@ from ml.rag_playlist_generator import (
     enrich_discovered_songs,
     generate_ai_dj_synthesis
 )
+from ml.query_planner import decompose_query
+from config import settings
 
 router = APIRouter(prefix="/api/playlists", tags=["Playlists"])
 
@@ -21,16 +23,45 @@ def generate_mood_playlist(
 ):
     user_songs = db.query(Song).filter(Song.user_id == current_user.id).all()
 
-    # 1. Pure PyTorch Hybrid RAG Search on Actual User Database Songs
+    # ------------------------------------------------------------------
+    # Step 1: Query Planner — decompose the user prompt
+    # ------------------------------------------------------------------
+    # The planner extracts mood/tempo/energy constraints and generates
+    # HyDE descriptions for better retrieval.
+    # ------------------------------------------------------------------
+
+    if settings.PLANNER_ENABLED:
+        plan = decompose_query(payload.prompt)
+    else:
+        plan = None
+
+    # ------------------------------------------------------------------
+    # Step 2: PyTorch Hybrid RAG Search with RRF + MMR
+    # ------------------------------------------------------------------
+    # Now uses: Query Planner -> Metadata Filter -> Dense+Sparse ->
+    #           RRF Fusion -> Cross-Encoder Rerank -> MMR Diversity
+    # ------------------------------------------------------------------
+
     ranked_lib_songs = pytorch_database_rag_search(payload.prompt, user_songs)
 
-    # 2. Local Ollama AI DJ Synthesis (Sequences library songs + Zero-shot discovers new songs)
-    curation = generate_ai_dj_synthesis(payload.prompt, ranked_lib_songs)
+    # ------------------------------------------------------------------
+    # Step 3: AI DJ Synthesis with Per-Track Explanations
+    # ------------------------------------------------------------------
+    # Now generates per-track "why_track" explanations and self-critique.
+    # ------------------------------------------------------------------
 
-    # 3. Auto-enrich Zero-Shot Discoveries with Album Covers
+    curation = generate_ai_dj_synthesis(payload.prompt, ranked_lib_songs, planner_plan=plan)
+
+    # ------------------------------------------------------------------
+    # Step 4: Auto-enrich Zero-Shot Discoveries with Album Covers
+    # ------------------------------------------------------------------
+
     enriched_discoveries = enrich_discovered_songs(curation.get("new_song_recommendations", []))
 
-    # 4. Save to Database
+    # ------------------------------------------------------------------
+    # Step 5: Save to Database
+    # ------------------------------------------------------------------
+
     new_playlist = Playlist(
         user_id=current_user.id,
         name=curation.get("playlist_title", "AI Curated Playlist"),
@@ -53,8 +84,15 @@ def generate_mood_playlist(
     db.commit()
     db.refresh(new_playlist)
 
+    # ------------------------------------------------------------------
+    # Step 6: Build response with new fields
+    # ------------------------------------------------------------------
+
     response = PlaylistResponse.model_validate(new_playlist)
     response.new_recommendations = [SuggestedSong(**d) for d in enriched_discoveries]
+    response.track_explanations = curation.get("track_explanations", {})
+    response.quality_score = curation.get("quality_score")
+    response.quality_notes = curation.get("quality_notes")
     return response
 
 @router.post("", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)

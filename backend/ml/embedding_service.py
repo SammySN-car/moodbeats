@@ -71,16 +71,15 @@ def build_song_profile_text(
     energy: float,
     danceability: float = 0.5,
     valence: float = 0.5,
-    lyrics: str = "",
     lyrics_sentiment: float = 0.0
 ) -> str:
+    """Build a rich text profile for a song used for embedding and BM25 search."""
     energy_desc = "explosive high-energy powerful adrenaline" if energy >= 0.7 else "calm acoustic gentle mellow quiet" if energy <= 0.35 else "moderate steady groove"
     valence_desc = "euphoric joyful upbeat bright" if valence >= 0.65 else "melancholic sad dark sorrowful longing" if valence <= 0.35 else "balanced neutral"
     tempo_desc = f"fast pace {round(tempo)} BPM" if tempo >= 125 else f"slow quiet {round(tempo)} BPM" if tempo <= 95 else f"mid-tempo {round(tempo)} BPM"
-    lyrics_snippet = (lyrics[:180] if lyrics else "").replace("\n", " ")
 
     return (
         f"Track: '{title}' by {artist}. Mood: {mood}. "
         f"Musical Feel: {energy_desc}, {valence_desc}, {tempo_desc}. "
-        f"Lyrical Sentiment: {round(lyrics_sentiment, 2)}. Themes: {lyrics_snippet}"
+        f"Lyrical Sentiment: {round(lyrics_sentiment, 2)}"
     )
