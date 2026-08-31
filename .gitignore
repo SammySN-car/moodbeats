@@ -8,12 +8,18 @@ env/
 venv/
 ENV/
 .venv
+*.egg-info/
+*.egg
+dist/
+build/
 
 # Database & Environment
 *.db
 *.sqlite3
-backend/moodbeats.db
+*.sqlite
 .env
+.env.local
+.env.production
 
 # Node & Frontend
 node_modules/
@@ -22,9 +28,29 @@ dist-ssr/
 *.local
 .npm
 .vite
+frontend/dist/
 
 # IDE & OS
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# ML Models (downloaded at runtime, don't commit)
+# models/
+# .cache/
+
+# Ollama (local, don't commit)
+# ollama/
+
+# Temporary files
+*.tmp
+*.temp

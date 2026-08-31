@@ -1,58 +1,142 @@
-# 🎵 MoodBeats
+# MoodBeats
 
-> **Spotify-Native AI Music Mood Classifier & Database-Driven PyTorch Hybrid RAG Playlist Builder**
+AI-powered music discovery platform with a Retrieval-Augmented Generation (RAG) pipeline, neural reranking, and real-time audio feature extraction.
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg)](https://pytorch.org/)
-[![Vue 3](https://img.shields.io/badge/Vue.js-3.0%2B-4FC08D.svg)](https://vuejs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+> **License:** AGPL-3.0 — see [LICENSE](LICENSE)
 
 ---
 
-## 🌟 Key Highlights
+## What It Does
 
-* ⚡ **Pure PyTorch Hybrid RAG Search**: Dense 384d semantic vectors (`all-MiniLM-L6-v2`) + Sparse BM25Okapi lexical matching over SQLite database library songs.
-* 🧠 **Neural Cross-Encoder Reranking**: Sub-50ms deep transformer cross-attention using `cross-encoder/ms-marco-MiniLM-L-6-v2`.
-* 🎙️ **Local AI DJ (Ollama LLM)**: Dynamic playlist titles, emotional curator liner notes, and 50+ non-repeating recommendations per vibe.
-* 💾 **100% Zero-Storage Philosophy**: 0 MB disk space. In-memory 4-feature audio extraction (`tempo`, `energy`, `danceability`, `valence`) in RAM (< 0.3s).
-* 🎧 **Dual-Stream Playback**: Persistent in-app audio player supporting 30s preview clips and verified official studio YouTube streams.
-* 🎤 **50-Song Artist Discography**: 1-click exploration of complete artist catalogs with live audio previews and instant library importing.
-* 🌿 **Calm Spotify-Dark UI**: Full-width, space-efficient, responsive Vue 3 interface.
+MoodBeats lets you describe any vibe, mood, or setting in natural language ("late night highway drive in the rain with synthwave vibes") and generates a curated playlist from **your own music library** plus **zero-shot discoveries** of new tracks.
 
----
+### Core Pipeline
 
-## 📁 Repository Overview
-
-* [`ARCHITECTURE_FLOW_AND_AUDIT.md`](./ARCHITECTURE_FLOW_AND_AUDIT.md): Detailed system architecture, mathematical formulations, and component audits.
-* [`MOODBEATS_AI_CONTEXT.md`](./MOODBEATS_AI_CONTEXT.md): Complete single-source-of-truth context guide for AI assistants and developers.
-* [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md): Full implementation plan, milestones, and verification benchmarks.
-* `backend/`: FastAPI backend with PyTorch neural pipeline, Librosa audio engine, and SQLite database.
-* `frontend/`: Vue 3 + Vite SPA with persistent dual-mode floating player.
-
----
-
-## 🚀 Quick Start
-
-### 1. Backend Setup
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+User Prompt
+  → Bi-Encoder Dense Search (384d embeddings, cosine similarity)
+  → BM25 Sparse Lexical Search (keyword matching)
+  → Hybrid Convex Fusion (0.65 Dense + 0.35 Sparse)
+  → Neural Cross-Encoder Reranking (ms-marco MiniLM)
+  → Ollama AI DJ (sequencing + zero-shot recommendations)
+  → iTunes Verification (album art + preview streams)
 ```
 
-### 2. Frontend Setup
+### Audio Feature Extraction
+
+No Spotify API key required. Imports via Spotify URL, then:
+
+1. Fetches 30s preview stream from iTunes
+2. Converts to WAV via ffmpeg (in-memory, zero disk)
+3. Extracts **Tempo (BPM)**, **Energy (RMS)**, **Danceability (onset strength)**, **Valence (spectral brightness)** using librosa
+4. Classifies mood from audio features + lyrics sentiment (DistilBERT)
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | Vue 3, Vite, vue-router, chart.js, lucide-vue-next |
+| **Backend** | FastAPI, SQLAlchemy, SQLite, PyJWT, bcrypt |
+| **ML/NLP** | PyTorch, sentence-transformers, cross-encoders, DistilBERT sentiment |
+| **Search** | BM25 (rank_bm25), dense embeddings, hybrid fusion |
+| **LLM** | Ollama (llama3.2) for AI DJ synthesis |
+| **Metadata** | iTunes Search API, YouTube HTML scraping, lyrics.ovh |
+
+---
+
+## Project Structure
+
+```
+moodbeats-redesign/
+├── backend/
+│   ├── main.py              # FastAPI app, model pre-warming
+│   ├── config.py            # Settings (Ollama, thresholds, secrets)
+│   ├── database.py          # SQLAlchemy engine + session
+│   ├── models.py            # User, Song, Playlist, PlaylistItem
+│   ├── schemas.py           # Pydantic request/response models
+│   ├── routers/
+│   │   ├── auth.py          # Register, login, JWT
+│   │   ├── songs.py         # Import, search, artist discography, YouTube
+│   │   ├── playlists.py     # AI generation, CRUD
+│   │   └── analytics.py     # Mood distribution, stats
+│   ├── ml/
+│   │   ├── embedding_service.py    # Bi-encoder, cross-encoder, embeddings
+│   │   ├── rag_playlist_generator.py  # Hybrid search + Ollama DJ
+│   │   ├── mood_classifier.py      # Rule-based mood from audio features
+│   │   ├── lyrics_fetcher.py       # Lyrics from public API
+│   │   └── sentiment.py            # DistilBERT sentiment analysis
+│   └── utils/
+│       ├── auth.py          # Password hashing, JWT, auth dependency
+│       └── spotify.py       # Spotify URL parsing, iTunes search, audio extraction
+├── frontend/
+│   └── src/
+│       ├── App.vue          # Header, routing, bottom player
+│       ├── views/           # Login, Signup, Dashboard
+│       ├── components/      # MoodDiscover, SongLibrary, MoodAnalytics, ImportSong, BottomPlayer
+│       ├── composables/     # usePlayer (shared audio state)
+│       └── api/             # Axios client
+├── DESIGN_SYSTEM.md         # Aurora UI design tokens & component specs
+├── USER_FLOW.md             # User flow diagrams
+├── CHANGELOG.md             # Improvement tracker
+└── LICENSE                  # AGPL-3.0
+```
+
+---
+
+## Getting Started
+
+### Backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+# Requires ffmpeg installed on system
+uvicorn main:app --reload --port 8000
+```
+
+### Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Open **http://localhost:5173** to start discovering music!
+### Ollama (optional, for AI DJ)
+
+```bash
+ollama pull llama3.2
+# Runs on localhost:11434 by default
+```
 
 ---
 
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Create account |
+| POST | `/api/auth/login` | Get JWT token |
+| GET | `/api/auth/me` | Current user info |
+| GET | `/api/songs` | List user's songs (filter by mood) |
+| GET | `/api/songs/search?q=` | Search tracks (iTunes) |
+| GET | `/api/songs/artist?name=` | Artist discography |
+| POST | `/api/songs/import` | Import from Spotify URL |
+| DELETE | `/api/songs/{id}` | Remove song |
+| GET | `/api/songs/youtube-id` | Find YouTube stream |
+| POST | `/api/playlists/generate` | AI mood playlist |
+| POST | `/api/playlists` | Create manual playlist |
+| GET | `/api/playlists` | List playlists |
+| DELETE | `/api/playlists/{id}` | Delete playlist |
+| GET | `/api/analytics/mood-distribution` | Mood breakdown |
+| GET | `/api/analytics/stats` | Library stats |
+
+---
+
+## License
+
+This project is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE) for details.
+
+You may use, modify, and distribute this software under the AGPL-3.0 terms. If you modify and run this software as a network service, you must provide the source code of your modified version to all users of that service.
