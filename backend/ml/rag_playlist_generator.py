@@ -1,56 +1,38 @@
 # =============================================================================
-# RAG PLAYLIST GENERATOR — Advanced RAG Pipeline
+# RAG PLAYLIST GENERATOR -------------------------------------- PyTorch Hybrid RAG + Cross-Encoder + Ollama AI DJ
 # =============================================================================
-# Architecture (v2):
-#   1. Query Planner    — Ollama decomposes prompt into structured search plan
-#   2. Hybrid Retrieve  — Dense (384d) + Sparse (BM25) with Reciprocal Rank Fusion
-#   3. Metadata Filter  — Pre-filter by mood/tempo/energy from planner
-#   4. Neural Rerank    — Cross-Encoder reranking with quality gate
-#   5. Diversity (MMR)  — Maximal Marginal Relevance for playlist variety
-#   6. AI DJ + Critique — Ollama generates playlist with per-track explanations
+# Pipeline:
+#   1. Query Planner (Ollama decomposes user prompt into structured plan)
+#   2. Metadata Pre-Filter (filter by mood/tempo/energy BEFORE vector search)
+#   3. Dense Retrieval (bi-encoder cosine similarity)
+#   4. Sparse Retrieval (BM25 lexical matching)
+#   5. Reciprocal Rank Fusion (RRF) -------------------------------------- no weight tuning needed
+#   6. Cross-Encoder Reranking (neural quality scoring)
+#   7. MMR Diversity Reranking (prevent all-same-mood playlists)
+#   8. AI DJ Synthesis (Ollama generates playlist + per-track explanations)
 # =============================================================================
 
-import re
 import json
-import requests
 import torch
 import torch.nn.functional as F
-from rank_bm25 import BM25Okapi
-from config import settings
 from ml.embedding_service import (
-    get_device,
+    get_text_embedding_tensor,
     get_batch_embeddings_tensor,
+    get_device,
     neural_cross_rerank,
     build_song_profile_text
 )
-from ml.query_planner import decompose_query
-from utils.spotify import search_itunes, verify_track_on_itunes
+from ml.query_planner import decompose_query, normalize_mood
+from rank_bm25 import BM25Okapi
+from config import settings
+import requests
+from typing import List, Dict, Optional, Tuple
+
+device = get_device()
 
 
 # =============================================================================
-# SECTION 1: Utility Functions
-# =============================================================================
-
-def _normalize_song_key(title: str, artist: str = "") -> str:
-    """Normalize title and artist to eliminate duplicate remixes, slowed/sped-up versions, and edits."""
-    t = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title)
-    t = re.sub(r'[-–—].*$', '', t)
-    t = re.sub(r'[^\w\s]', '', t).strip().lower()
-
-    a = re.sub(r'[\(\[\{].*?[\)\]\}]', '', artist)
-    a = re.sub(r'[^\w\s]', '', a).strip().lower()
-    a_first = a.split()[0] if a else ""
-
-    return f"{t}_{a_first}"
-
-
-def _clean_track_title(title: str) -> str:
-    """Clean Ollama prefix formatting like 'Song 1: Tokyo Drift' -> 'Tokyo Drift'."""
-    return re.sub(r'^(Song\s*\d+:?|\d+[\.\)]\s*)', '', title.strip()).strip(' "\'')
-
-
-# =============================================================================
-# SECTION 2: Reciprocal Rank Fusion (RRF)
+# SECTION 1: Reciprocal Rank Fusion (RRF)
 # =============================================================================
 # Why RRF over weighted sum?
 # Weighted sum (0.65*dense + 0.35*sparse) requires tuning and fails when
@@ -96,11 +78,14 @@ def reciprocal_rank_fusion(
 
 
 # =============================================================================
-# SECTION 3: Metadata Pre-Filter
+# SECTION 2: Metadata Pre-Filter
 # =============================================================================
 # Why: If the planner extracts mood/tempo/energy constraints, we can filter
 # candidates BEFORE expensive neural reranking. This reduces the search space
 # and eliminates obviously wrong candidates early.
+#
+# Mood matching: uses fuzzy matching -------------------------------------- "melancholic" matches "sad",
+# "aggressive" matches "energetic", etc. via normalize_mood().
 # =============================================================================
 
 def _metadata_filter(
@@ -114,13 +99,20 @@ def _metadata_filter(
 
     Returns indices of songs that pass ALL filters.
     Songs with missing metadata pass through (we don't penalize missing data).
+
+    Mood matching is fuzzy: "melancholic" maps to "sad", "aggressive" to "energetic", etc.
     """
+    # Normalize the mood to canonical form
+    normalized_mood = normalize_mood(mood) if mood else None
+
     filtered_indices = []
 
     for i, s in enumerate(library_songs):
-        # Mood filter: exact match
-        if mood and s.mood and s.mood.lower() != mood.lower():
-            continue
+        # Mood filter: fuzzy match via normalize_mood
+        if normalized_mood and s.mood:
+            song_mood = normalize_mood(s.mood)
+            if song_mood and song_mood != normalized_mood:
+                continue
 
         # Tempo filter: check if song tempo falls within range
         if tempo_range and s.tempo:
@@ -138,7 +130,7 @@ def _metadata_filter(
 
 
 # =============================================================================
-# SECTION 4: Maximal Marginal Relevance (MMR) — Diversity Reranking
+# SECTION 3: Maximal Marginal Relevance (MMR) -------------------------------------- Diversity Reranking
 # =============================================================================
 # Why: Without diversity, playlists can be all the same mood/tempo.
 # MMR balances relevance with diversity by penalizing candidates that are
@@ -160,129 +152,105 @@ def mmr_rerank(
 
     Args:
         candidates: List of (score, song) tuples
-        candidate_embeddings: Tensor of shape (N, 384) — embeddings of candidates
-        query_embedding: Tensor of shape (1, 384) — query embedding
-        lambda_param: Tradeoff between relevance and diversity (0-1)
-        top_k: Number of candidates to return
+        candidate_embeddings: Tensor of shape (N, 384) -------------------------------------- embeddings of candidates
+        query_embedding: Tensor of shape (1, 384) -------------------------------------- query embedding
+        lambda_param: Balance between relevance and diversity (0=diversity, 1=relevance)
+        top_k: Number of results to return
 
     Returns:
-        Re-ranked list of (score, song) tuples with diversity
+        Diversified list of (score, song) tuples
     """
     if lambda_param is None:
         lambda_param = settings.MMR_LAMBDA
     if top_k is None:
-        top_k = min(settings.MAX_PLAYLIST_SONGS, len(candidates))
+        top_k = settings.TOP_K
 
-    if len(candidates) <= 1:
-        return candidates[:top_k]
+    if len(candidates) <= top_k:
+        return candidates
 
-    # Compute relevance scores (cosine similarity to query)
-    relevance_scores = F.cosine_similarity(
-        candidate_embeddings, query_embedding, dim=1
-    )
+    # Compute query-candidate similarities
+    query_sim = F.cosine_similarity(query_embedding, candidate_embeddings, dim=1)
 
-    # Normalize relevance to [0, 1]
-    rel_min = relevance_scores.min()
-    rel_max = relevance_scores.max()
-    if rel_max - rel_min > 0:
-        relevance_scores = (relevance_scores - rel_min) / (rel_max - rel_min)
-
-    # Compute inter-candidate similarity matrix
-    # sim_matrix[i][j] = cosine similarity between candidate i and candidate j
-    sim_matrix = F.cosine_similarity(
-        candidate_embeddings.unsqueeze(1),
-        candidate_embeddings.unsqueeze(0),
-        dim=2
-    )
-
-    # Greedy MMR selection
-    selected_indices = []
-    remaining_indices = list(range(len(candidates)))
+    # Track selected and remaining
+    selected = []
+    remaining = list(range(len(candidates)))
 
     for _ in range(min(top_k, len(candidates))):
-        if not remaining_indices:
+        if not remaining:
             break
 
         best_score = -float('inf')
-        best_idx = remaining_indices[0]
+        best_idx = remaining[0]
 
-        for idx in remaining_indices:
-            # Relevance component
-            rel = relevance_scores[idx].item()
+        for idx in remaining:
+            # Relevance: how well does this candidate match the query?
+            relevance = query_sim[idx].item()
 
-            # Diversity component: max similarity to any already-selected candidate
-            if selected_indices:
-                max_sim = max(sim_matrix[idx][s].item() for s in selected_indices)
+            # Diversity: how similar is this candidate to already-selected ones?
+            if selected:
+                selected_embs = candidate_embeddings[selected]
+                candidate_emb = candidate_embeddings[idx].unsqueeze(0)
+                sim_to_selected = F.cosine_similarity(candidate_emb, selected_embs, dim=1).max().item()
             else:
-                max_sim = 0.0
+                sim_to_selected = 0.0
 
-            # MMR score
-            mmr_score = lambda_param * rel - (1 - lambda_param) * max_sim
+            # MMR score: balance relevance and diversity
+            mmr_score = lambda_param * relevance - (1 - lambda_param) * sim_to_selected
 
             if mmr_score > best_score:
                 best_score = mmr_score
                 best_idx = idx
 
-        selected_indices.append(best_idx)
-        remaining_indices.remove(best_idx)
+        selected.append(best_idx)
+        remaining.remove(best_idx)
 
-    return [candidates[i] for i in selected_indices]
+    return [candidates[i] for i in selected]
 
 
 # =============================================================================
-# SECTION 5: Main RAG Search Pipeline
+# SECTION 4: PyTorch Hybrid RAG Search -------------------------------------- The Core Pipeline
 # =============================================================================
-# This is the core function. Flow:
-#   User Prompt
-#     -> Query Planner (Ollama decomposes into structured plan)
-#     -> Metadata Pre-Filter (filter by mood/tempo/energy)
-#     -> Dense Search (384d bi-encoder embeddings)
-#     -> Sparse Search (BM25 lexical matching)
-#     -> RRF Fusion (reciprocal rank fusion, not hardcoded weights)
-#     -> Cross-Encoder Reranking (neural quality scoring)
-#     -> MMR Diversity (prevent all-same-mood playlists)
-#     -> Return ranked results
+# This is the heart of MoodBeats' recommendation engine.
+# It combines dense (neural) and sparse (lexical) retrieval, fuses them
+# with RRF, reranks with a cross-encoder, and diversifies with MMR.
 # =============================================================================
 
-def pytorch_database_rag_search(user_prompt: str, library_songs: list) -> list:
+def pytorch_database_rag_search(
+    user_prompt: str,
+    library_songs: list,
+    planner_plan: dict = None,
+    top_k: int = None
+) -> list:
     """
-    Advanced PyTorch RAG Search on User Library Songs.
+    Hybrid RAG search: Dense (Bi-encoder) + Sparse (BM25) -> RRF Fusion -> Rerank -> MMR.
 
-    Pipeline:
-      1. Query Planner — Ollama decomposes prompt (HyDE + expansion + metadata)
-      2. Metadata Pre-Filter — Filter candidates by mood/tempo/energy
-      3. Dense + Sparse Retrieval — Bi-encoder + BM25
-      4. RRF Fusion — Reciprocal Rank Fusion (not hardcoded weights)
-      5. Cross-Encoder Reranking — Neural quality scoring
-      6. MMR Diversity — Maximal Marginal Relevance for playlist variety
+    Args:
+        user_prompt: The user's vibe description
+        library_songs: List of Song ORM objects from database
+        planner_plan: Pre-computed plan from Query Planner (optional)
+        top_k: Number of results to return
+
+    Returns:
+        List of (score, song) tuples, ranked by relevance
     """
+    if top_k is None:
+        top_k = settings.TOP_K
+
     if not library_songs:
         return []
 
-    device = get_device()
-
     # ------------------------------------------------------------------
-    # Step 1: Query Planner — decompose the user prompt
+    # Step 1: Query Planning
     # ------------------------------------------------------------------
-    # The planner uses Ollama to extract:
-    #   - HyDE description (for better embedding)
-    #   - Expanded queries (for multi-query retrieval)
-    #   - Mood/tempo/energy ranges (for metadata filtering)
-    #   - Keywords (for BM25 boosting)
+    # If a plan wasn't provided, decompose the prompt now.
+    # The plan gives us HyDE descriptions, expanded queries, and
+    # metadata constraints (mood, tempo, energy).
     # ------------------------------------------------------------------
 
-    if settings.PLANNER_ENABLED:
+    if planner_plan is None:
         plan = decompose_query(user_prompt)
     else:
-        plan = {
-            "hyde_description": user_prompt,
-            "expanded_queries": [user_prompt],
-            "mood": None,
-            "tempo_range": [0, 200],
-            "energy_range": [0.0, 1.0],
-            "keywords": [],
-            "search_paths": ["semantic"]
-        }
+        plan = planner_plan
 
     # Use HyDE description as the primary embedding query if available
     # HyDE generates a hypothetical ideal track description that is
@@ -307,7 +275,7 @@ def pytorch_database_rag_search(user_prompt: str, library_songs: list) -> list:
 
     # If metadata filtering removes ALL songs, fall back to unfiltered
     if len(filter_indices) == 0:
-        print("[RAG] Metadata filter removed all songs — falling back to unfiltered")
+        print("[RAG] Metadata filter removed all songs -------------------------------------- falling back to unfiltered")
         filtered_songs = library_songs
         filter_indices = list(range(len(library_songs)))
     else:
@@ -320,14 +288,14 @@ def pytorch_database_rag_search(user_prompt: str, library_songs: list) -> list:
 
     lib_docs = []
     for s in filtered_songs:
-        if s.embedding:
+        if getattr(s, 'embedding', None):
             doc = f"Track: '{s.title}' by {s.artist}. Mood: {s.mood}. Tempo: {s.tempo} BPM. Energy: {s.energy}."
         else:
             doc = build_song_profile_text(s.title, s.artist, s.mood or "chill", s.tempo or 120.0, s.energy or 0.5)
         lib_docs.append(doc)
 
     # ------------------------------------------------------------------
-    # Step 4: Dense Retrieval — Bi-encoder matrix dot-product
+    # Step 4: Dense Retrieval -------------------------------------- Bi-encoder matrix dot-product
     # ------------------------------------------------------------------
     # Embed the (possibly HyDE-expanded) query and compute cosine
     # similarity against all candidate embeddings.
@@ -348,270 +316,221 @@ def pytorch_database_rag_search(user_prompt: str, library_songs: list) -> list:
 
     dense_scores = torch.matmul(lib_vectors, prompt_tensor.T).squeeze(-1)
 
-    print(f"[RAG] Dense scores — min: {dense_scores.min():.4f}, max: {dense_scores.max():.4f}")
+    print(f"[RAG] Dense scores -------------------------------------- min: {dense_scores.min():.4f}, max: {dense_scores.max():.4f}")
 
     # ------------------------------------------------------------------
-    # Step 5: Sparse Retrieval — BM25 lexical matching
+    # Step 5: Sparse Retrieval -------------------------------------- BM25 lexical matching
     # ------------------------------------------------------------------
     # BM25 catches exact keyword matches that dense retrieval might miss.
     # We combine original prompt keywords + planner keywords for BM25.
     # ------------------------------------------------------------------
 
-    bm25_lib = BM25Okapi([d.lower().split() for d in lib_docs])
+    all_keywords = " ".join(plan.get("keywords", []))
+    bm25_query = f"{user_prompt} {all_keywords}"
+    tokenized_query = bm25_query.lower().split()
+    tokenized_corpus = [doc.lower().split() for doc in lib_docs]
 
-    # Use original prompt + keywords for BM25 query
-    bm25_query = user_prompt.lower().split()
-    if plan.get("keywords"):
-        bm25_query.extend([k.lower() for k in plan["keywords"]])
+    if tokenized_corpus:
+        bm25 = BM25Okapi(tokenized_corpus)
+        sparse_scores = torch.tensor(
+            bm25.get_scores(tokenized_query),
+            dtype=torch.float32, device=device
+        )
+    else:
+        sparse_scores = torch.zeros(len(filtered_songs), device=device)
 
-    sparse_raw = torch.tensor(
-        bm25_lib.get_scores(bm25_query),
-        dtype=torch.float32, device=device
-    )
-    max_sparse = torch.max(sparse_raw)
-    sparse_scores = sparse_raw / (max_sparse if max_sparse > 0 else 1.0)
-
-    print(f"[RAG] Sparse scores — min: {sparse_scores.min():.4f}, max: {sparse_scores.max():.4f}")
+    print(f"[RAG] Sparse scores -------------------------------------- min: {sparse_scores.min():.4f}, max: {sparse_scores.max():.4f}")
 
     # ------------------------------------------------------------------
     # Step 6: Reciprocal Rank Fusion (RRF)
     # ------------------------------------------------------------------
-    # Replace hardcoded 0.65/0.35 with RRF. No weight tuning needed.
-    # Source: Agile Infoways showed RRF lifts recall@10 by 8-14 points.
+    # Combine dense and sparse scores using rank-based fusion.
+    # This replaces the old hardcoded 0.65/0.35 weighting.
     # ------------------------------------------------------------------
 
-    hybrid_scores = reciprocal_rank_fusion(dense_scores, sparse_scores)
+    rrf_scores = reciprocal_rank_fusion(dense_scores, sparse_scores)
 
-    print(f"[RAG] RRF scores — min: {hybrid_scores.min():.6f}, max: {hybrid_scores.max():.6f}")
-
-    # ------------------------------------------------------------------
-    # Step 7: Select top-K candidates for neural reranking
-    # ------------------------------------------------------------------
-
-    top_k = min(settings.RERANKER_TOP_K, len(filtered_songs))
-    topk_scores, topk_indices = torch.topk(hybrid_scores, k=top_k)
-
-    candidate_songs = [filtered_songs[i] for i in topk_indices.tolist()]
-    candidate_docs = [lib_docs[i] for i in topk_indices.tolist()]
-
-    print(f"[RAG] Top-{top_k} candidates selected for neural reranking")
+    print(f"[RAG] RRF scores -------------------------------------- min: {rrf_scores.min():.6f}, max: {rrf_scores.max():.6f}")
 
     # ------------------------------------------------------------------
-    # Step 8: Cross-Encoder Neural Reranking
+    # Step 7: Cross-Encoder Reranking
     # ------------------------------------------------------------------
-    # Cross-encoder reads (query, document) pairs and scores relevance.
-    # Much more accurate than bi-encoder but slower — only used on top-K.
+    # The cross-encoder re-scores each (query, document) pair directly.
+    # This is more accurate than bi-encoder but O(n) -------------------------------------- only feasible
+    # after RRF has reduced the candidate set.
     # ------------------------------------------------------------------
 
-    cross_scores = neural_cross_rerank(embedding_query, candidate_docs)
-    rerank_indices = sorted(range(len(cross_scores)), key=lambda i: cross_scores[i], reverse=True)
+    # Top candidates from RRF (we'll rerank the top 2x to allow MMR to select)
+    rrf_top_k = min(top_k * 2, len(filtered_songs))
+    rrf_top_indices = torch.argsort(rrf_scores, descending=True)[:rrf_top_k]
 
-    # Adaptive threshold: stricter for larger libraries
-    threshold = -6.0 if len(filtered_songs) <= 5 else -4.0
-    ranked_library_songs = [
-        (cross_scores[i], candidate_songs[i])
-        for i in rerank_indices
-        if cross_scores[i] > threshold
+    rerank_docs = [lib_docs[i] for i in rrf_top_indices]
+    cross_scores = neural_cross_rerank(user_prompt, rerank_docs)
+    cross_scores_tensor = torch.tensor(cross_scores, dtype=torch.float32, device=device)
+
+    # Normalize cross-encoder scores to 0-1 range using sigmoid
+    # The ms-marco model outputs raw logits (negative = low relevance)
+    # Sigmoid maps them to [0, 1] for fair combination with RRF scores
+    cross_scores_normalized = torch.sigmoid(cross_scores_tensor)
+
+    # Combine RRF and cross-encoder scores (both now in 0-1 range)
+    rrf_of_top = rrf_scores[rrf_top_indices]
+
+    # Normalize RRF scores to 0-1 range too
+    rrf_min = rrf_of_top.min()
+    rrf_max = rrf_of_top.max()
+    if rrf_max > rrf_min:
+        rrf_normalized = (rrf_of_top - rrf_min) / (rrf_max - rrf_min)
+    else:
+        rrf_normalized = torch.ones_like(rrf_of_top) * 0.5
+
+    # Weighted combination: 60% semantic (cross-encoder) + 40% rank fusion (RRF)
+    combined = 0.6 * cross_scores_normalized + 0.4 * rrf_normalized
+
+    # Create (score, song) tuples
+    candidates = [
+        (combined[j].item(), filtered_songs[rrf_top_indices[j]])
+        for j in range(len(rrf_top_indices))
     ]
 
-    # If nothing passed threshold but library is small, take the best one
-    if not ranked_library_songs and len(candidate_songs) > 0 and len(filtered_songs) <= 5:
-        best_idx = rerank_indices[0]
-        ranked_library_songs = [(cross_scores[best_idx], candidate_songs[best_idx])]
+    # Sort by combined score
+    candidates.sort(key=lambda x: x[0], reverse=True)
 
-    print(f"[RAG] After reranking: {len(ranked_library_songs)} songs passed threshold")
+    print(f"[RAG] Cross-encoder reranked top {len(candidates)} candidates")
 
     # ------------------------------------------------------------------
-    # Step 9: MMR Diversity Reranking
+    # Step 8: MMR Diversity Reranking
     # ------------------------------------------------------------------
-    # Prevent all-same-mood playlists by applying Maximal Marginal Relevance.
-    # Balances relevance with diversity (configurable via MMR_LAMBDA).
+    # Prevent all-same-mood playlists by penalizing redundant candidates.
     # ------------------------------------------------------------------
 
-    if len(ranked_library_songs) > 1:
-        # Get embeddings for MMR diversity computation
-        mmr_songs = [s for _, s in ranked_library_songs]
-        mmr_docs = [
-            build_song_profile_text(s.title, s.artist, s.mood or "chill", s.tempo or 120.0, s.energy or 0.5)
-            for s in mmr_songs
-        ]
-        mmr_embeddings = get_batch_embeddings_tensor(mmr_docs)
+    # Build embeddings for MMR
+    candidate_songs = [s for _, s in candidates]
+    candidate_docs = [
+        build_song_profile_text(s.title, s.artist, s.mood or "chill", s.tempo or 120.0, s.energy or 0.5)
+        for s in candidate_songs
+    ]
+    candidate_embeddings = get_batch_embeddings_tensor(candidate_docs)
 
-        ranked_library_songs = mmr_rerank(
-            ranked_library_songs,
-            mmr_embeddings,
-            prompt_tensor
-        )
+    diversified = mmr_rerank(candidates, candidate_embeddings, prompt_tensor)
 
-        print(f"[RAG] After MMR diversity: {len(ranked_library_songs)} songs")
+    print(f"[RAG] MMR diversified to {len(diversified)} results")
 
-    return ranked_library_songs
+    # Print final ranking
+    print(f"\n[RAG] Final ranking:")
+    for i, (score, song) in enumerate(diversified[:10]):
+        print(f"  {i+1}. {song.title} by {song.artist} (mood={song.mood}, {song.tempo:.0f} BPM) -------------------------------------- score: {score:.4f}")
+
+    return diversified[:top_k]
 
 
 # =============================================================================
-# SECTION 6: iTunes Enrichment & Discovery
+# SECTION 5: External API -------------------------------------- Enrich New Discoveries
 # =============================================================================
 
-def enrich_discovered_songs(new_song_list: list) -> list[dict]:
-    """Auto-verifies against iTunes, deduplicates, and fetches artwork."""
+def enrich_discovered_songs(new_songs: list) -> list:
+    """
+    Enrich zero-shot song discoveries with album art from iTunes.
+
+    Takes the list of dicts from AI DJ's new_song_recommendations
+    and adds album_art_url to each.
+    """
+    from utils.spotify import search_itunes
+
     enriched = []
-    seen_keys = set()
+    for song in new_songs:
+        title = song.get("title", "")
+        artist = song.get("artist", "")
 
-    for rec in new_song_list:
-        raw_title = rec.get("title", "")
-        title = _clean_track_title(raw_title)
-        artist = rec.get("artist", "").strip(' "\'')
-        if not title:
-            continue
+        itunes_results = search_itunes(f"{title} {artist}", limit=1)
+        if itunes_results:
+            song["album_art_url"] = itunes_results[0].get("album_art_url", "")
+        else:
+            song["album_art_url"] = ""
 
-        norm_key = _normalize_song_key(title, artist)
-        if norm_key in seen_keys:
-            continue
+        enriched.append(song)
 
-        art_url = rec.get("album_art_url")
-        preview_url = rec.get("preview_url")
-
-        if not art_url or not preview_url:
-            verified = verify_track_on_itunes(title, artist)
-            if verified:
-                title = verified["title"]
-                artist = verified["artist"]
-                art_url = verified["album_art_url"]
-                preview_url = verified["preview_url"]
-
-        final_key = _normalize_song_key(title, artist)
-        if final_key in seen_keys:
-            continue
-
-        if art_url:
-            seen_keys.add(norm_key)
-            seen_keys.add(final_key)
-            enriched.append({
-                "title": title,
-                "artist": artist,
-                "album_art_url": art_url,
-                "preview_url": preview_url,
-                "spotify_url": f"https://open.spotify.com/search/{title} {artist}",
-                "spotify_id": f"disc_{abs(hash(title))}"
-            })
     return enriched
 
 
-def _get_dynamic_public_discoveries(user_prompt: str, limit: int = 50, existing_keys: set = None) -> list[dict]:
-    """Dynamically search iTunes for up to 50 vibe-matching tracks without duplicates."""
-    clean_query = re.sub(r'[^\w\s]', '', user_prompt)
-    words = [w for w in clean_query.split() if len(w) > 2]
-
-    results = []
-    seen = set(existing_keys) if existing_keys else set()
-
-    search_queries = [
-        " ".join(words[:4]),
-        f"{words[0]} {words[-1]}" if len(words) > 1 else words[0],
-        f"{words[0]} top hits" if words else "top hits",
-        f"{words[0]} music" if words else "pop"
-    ]
-
-    for sq in search_queries:
-        if len(results) >= limit:
-            break
-        raw = search_itunes(sq, entity="song", limit=limit)
-        for item in raw:
-            title, artist = item.get("trackName", ""), item.get("artistName", "")
-            art_url = item.get("artworkUrl100")
-            if title and artist and art_url:
-                k = _normalize_song_key(title, artist)
-                if k not in seen:
-                    seen.add(k)
-                    results.append({
-                        "title": title,
-                        "artist": artist,
-                        "album_art_url": art_url,
-                        "preview_url": item.get("previewUrl")
-                    })
-                    if len(results) >= limit:
-                        break
-
-    return results[:limit]
-
-
 # =============================================================================
-# SECTION 7: AI DJ Synthesis with Per-Track Explanations
-# =============================================================================
-# Upgraded prompt now includes:
-#   - Per-track "why_track" explanations
-#   - Critique score for playlist quality
-#   - Uses query planner output for better context
+# SECTION 6: AI DJ Synthesis -------------------------------------- Ollama Generates the Playlist Narrative
 # =============================================================================
 
 def generate_ai_dj_synthesis(
     user_prompt: str,
-    library_songs: list,
-    planner_plan: dict = None
+    ranked_songs: list,
+    planner_plan: dict = None,
+    max_songs: int = None
 ) -> dict:
     """
-    Ollama AI DJ: Arranges library songs and recommends new songs.
+    Use Ollama to generate a curated playlist with per-track explanations.
 
-    Now includes per-track explanations and quality self-critique.
+    Args:
+        user_prompt: The user's vibe description
+        ranked_songs: List of (score, song) tuples from RAG search
+        planner_plan: Pre-computed plan from Query Planner
+        max_songs: Maximum songs in the playlist
+
+    Returns:
+        Dict with playlist_title, ai_dj_note, ordered_library_ids,
+        new_song_recommendations, track_explanations, quality_score, quality_notes
     """
+    if max_songs is None:
+        max_songs = settings.MAX_PLAYLIST_SONGS
 
-    valid_ids = [s.id for _, s in library_songs]
-    tracks_str = "\n".join([
-        f"- ID {s.id}: '{s.title}' by {s.artist} (Mood: {s.mood}, Tempo: {round(s.tempo or 0)} BPM, Energy: {round((s.energy or 0)*100)}%)"
-        for _, s in library_songs
-    ])
+    if not ranked_songs:
+        return {
+            "playlist_title": "Empty Playlist",
+            "ai_dj_note": "No matching songs found in your library.",
+            "ordered_library_ids": [],
+            "new_song_recommendations": [],
+            "track_explanations": {},
+            "quality_score": 0,
+            "quality_notes": "No songs to curate."
+        }
 
-    library_keys = {_normalize_song_key(s.title, s.artist or "") for _, s in library_songs}
-    dynamic_discoveries = _get_dynamic_public_discoveries(user_prompt, limit=settings.MAX_NEW_DISCOVERIES, existing_keys=library_keys)
+    # Build context from ranked songs
+    song_context = ""
+    for i, (score, song) in enumerate(ranked_songs[:max_songs]):
+        song_context += f"\n{i+1}. \"{song.title}\" by {song.artist} | Mood: {song.mood} | BPM: {song.tempo:.0f} | Energy: {song.energy:.2f} | Relevance: {score:.4f}"
 
-    fallback_result = {
-        "playlist_title": f"Vibe: {user_prompt[:25].capitalize()}",
-        "ai_dj_note": f"A curated set matching your vibe: '{user_prompt}'.",
-        "ordered_library_ids": valid_ids[:settings.MAX_PLAYLIST_SONGS],
-        "new_song_recommendations": dynamic_discoveries
-    }
-
-    # ------------------------------------------------------------------
-    # Build context from planner if available
-    # ------------------------------------------------------------------
+    # Build planner context if available
     planner_context = ""
     if planner_plan:
-        if planner_plan.get("mood"):
-            planner_context += f"\nDetected mood: {planner_plan['mood']}"
-        if planner_plan.get("keywords"):
-            planner_context += f"\nKey themes: {', '.join(planner_plan['keywords'][:5])}"
-        if planner_plan.get("hyde_description"):
-            planner_context += f"\nIdeal track feel: {planner_plan['hyde_description'][:150]}"
+        planner_context = f"""
+Search plan:
+- Mood: {planner_plan.get('mood', 'any')}
+- Tempo: {planner_plan.get('tempo_range', [0, 200])}
+- Energy: {planner_plan.get('energy_range', [0.0, 1.0])}
+- Keywords: {', '.join(planner_plan.get('keywords', []))}
+"""
 
-    # ------------------------------------------------------------------
-    # Prompt now asks for per-track explanations
-    # ------------------------------------------------------------------
-    prompt = f"""You are MoodBeats AI DJ, a master music curator.
-User requested this vibe: "{user_prompt}"
+    dj_prompt = f"""You are MoodBeats AI DJ. Curate a playlist from the user's library based on their vibe request.
+
+User wants: "{user_prompt}"
 {planner_context}
 
-Matching songs in user's library:
-{tracks_str if tracks_str else "None"}
+Available songs (ranked by AI relevance):
+{song_context}
 
-Perform these tasks:
-1. Select and arrange library songs in optimal sequence using ONLY valid IDs: {valid_ids}.
-2. For EACH library song you select, write a 1-sentence "why_track" explaining why it fits the vibe.
-3. Zero-shot recommend 4-5 REAL famous iconic songs that capture this exact vibe.
-4. Rate your own playlist quality from 1-10 (be honest — if it's below 7, suggest improvements).
+Your task:
+1. Pick the best {max_songs} songs that match the vibe
+2. Order them for optimal flow (energy arc, mood progression)
+3. Give each selected song a brief "why this track" explanation (1 sentence)
+4. Suggest 2-3 songs NOT in the library that would complement this playlist
+5. Rate the overall playlist quality 1-10 with brief notes
 
-Respond in valid JSON ONLY:
+Respond in JSON:
 {{
-  "playlist_title": "Creative 2-4 word playlist title",
-  "ai_dj_note": "2-sentence curator note explaining the mood progression and vibe",
-  "ordered_library_ids": [
-    {{"id": 1, "why_track": "Explanation for why this track fits"}},
-    {{"id": 2, "why_track": "Explanation for why this track fits"}}
-  ],
+  "playlist_title": "Creative playlist name",
+  "ai_dj_note": "2-3 sentence DJ introduction",
+  "ordered_library_ids": [list of song IDs in your chosen order],
+  "track_explanations": {{"song_id": "why this track fits"}},
   "new_song_recommendations": [
-    {{"title": "Real Song Title 1", "artist": "Real Artist 1"}},
-    {{"title": "Real Song Title 2", "artist": "Real Artist 2"}}
+    {{"title": "Song Title", "artist": "Artist Name", "reason": "why it complements"}}
   ],
-  "quality_score": 8,
+  "quality_score": 7,
   "quality_notes": "Brief self-critique of the playlist"
 }}"""
 
@@ -620,78 +539,50 @@ Respond in valid JSON ONLY:
             f"{settings.OLLAMA_BASE_URL}/api/generate",
             json={
                 "model": settings.OLLAMA_MODEL,
-                "prompt": prompt,
+                "prompt": dj_prompt,
                 "format": "json",
                 "stream": False,
                 "options": {
-                    "num_predict": settings.OLLAMA_MAX_TOKENS + 100,
-                    "temperature": 0.7
+                    "num_predict": 800,
+                    "temperature": 0.4
                 }
             },
             timeout=settings.OLLAMA_TIMEOUT_SECONDS
         )
+
         if resp.status_code == 200:
-            parsed = json.loads(resp.json().get("response", "{}"))
-            raw_ids = parsed.get("ordered_library_ids", [])
+            raw_response = resp.json().get("response", "{}")
+            curation = json.loads(raw_response)
 
-            # ------------------------------------------------------------------
-            # Parse ordered_library_ids — now supports both formats:
-            #   - Old: [1, 2, 3]
-            #   - New: [{"id": 1, "why_track": "..."}, ...]
-            # ------------------------------------------------------------------
-            cleaned_ids = []
-            track_explanations = {}
-            for entry in raw_ids:
-                if isinstance(entry, dict):
-                    sid = entry.get("id")
-                    why = entry.get("why_track", "")
-                    if sid in valid_ids and sid not in cleaned_ids:
-                        cleaned_ids.append(sid)
-                        track_explanations[sid] = why
-                elif isinstance(entry, int):
-                    if entry in valid_ids and entry not in cleaned_ids:
-                        cleaned_ids.append(entry)
-
-            raw_recs = parsed.get("new_song_recommendations", [])
-
-            seen_recs = set(library_keys)
-            valid_recs = []
-            for r in raw_recs:
-                t = _clean_track_title(r.get("title", ""))
-                a = r.get("artist", "")
-                if t and "song 1" not in t.lower():
-                    k = _normalize_song_key(t, a)
-                    if k not in seen_recs:
-                        seen_recs.add(k)
-                        valid_recs.append({"title": t, "artist": a})
-
-            merged_recs = list(valid_recs)
-            for d in dynamic_discoveries:
-                k = _normalize_song_key(d["title"], d.get("artist", ""))
-                if k not in seen_recs:
-                    seen_recs.add(k)
-                    merged_recs.append(d)
-                if len(merged_recs) >= settings.MAX_NEW_DISCOVERIES:
-                    break
-
+            # Validate and fill defaults
             result = {
-                "playlist_title": parsed.get("playlist_title", fallback_result["playlist_title"]),
-                "ai_dj_note": parsed.get("ai_dj_note", fallback_result["ai_dj_note"]),
-                "ordered_library_ids": cleaned_ids if cleaned_ids else valid_ids[:settings.MAX_PLAYLIST_SONGS],
-                "new_song_recommendations": merged_recs[:settings.MAX_NEW_DISCOVERIES],
-                "track_explanations": track_explanations,
-                "quality_score": parsed.get("quality_score", 0),
-                "quality_notes": parsed.get("quality_notes", "")
+                "playlist_title": curation.get("playlist_title", "AI Curated Playlist"),
+                "ai_dj_note": curation.get("ai_dj_note", f"Vibe: {user_prompt}"),
+                "ordered_library_ids": curation.get("ordered_library_ids", []),
+                "new_song_recommendations": curation.get("new_song_recommendations", []),
+                "track_explanations": curation.get("track_explanations", {}),
+                "quality_score": curation.get("quality_score"),
+                "quality_notes": curation.get("quality_notes")
             }
 
-            print(f"[AI DJ] Playlist: {result['playlist_title']}")
-            print(f"[AI DJ] Library tracks: {len(result['ordered_library_ids'])}")
-            print(f"[AI DJ] Discoveries: {len(result['new_song_recommendations'])}")
-            print(f"[AI DJ] Quality score: {result['quality_score']}/10")
-            print(f"[AI DJ] Track explanations: {len(result['track_explanations'])} tracks explained")
+            # Ensure ordered_library_ids are integers
+            result["ordered_library_ids"] = [int(x) for x in result["ordered_library_ids"] if x]
+
+            # Ensure track_explanations keys are strings (JSON keys are strings)
+            result["track_explanations"] = {str(k): v for k, v in result["track_explanations"].items()}
 
             return result
-    except Exception as e:
-        print(f"[AI DJ] Ollama call failed: {e}")
 
-    return fallback_result
+    except Exception as e:
+        print(f"[AI DJ] Ollama synthesis failed: {e}")
+
+    # Fallback: return ranked songs without AI curation
+    return {
+        "playlist_title": f"Playlist: {user_prompt}",
+        "ai_dj_note": f"Auto-generated from your library based on: {user_prompt}",
+        "ordered_library_ids": [song.id for _, song in ranked_songs[:max_songs]],
+        "new_song_recommendations": [],
+        "track_explanations": {},
+        "quality_score": None,
+        "quality_notes": "AI DJ unavailable -------------------------------------- using raw RAG ranking."
+    }

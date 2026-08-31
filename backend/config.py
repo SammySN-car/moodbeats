@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     OLLAMA_MAX_TOKENS: int = 250
 
     # PyTorch RAG & Neural Reranking Thresholds
+    TOP_K: int = 10                          # Final number of results from RAG pipeline
     SIMILARITY_THRESHOLD: float = 0.30      # Minimum score threshold
     RERANKER_TOP_K: int = 15                # Candidates sent to Neural Cross-Encoder
     MAX_PLAYLIST_SONGS: int = 12            # Target library tracks in generated playlist

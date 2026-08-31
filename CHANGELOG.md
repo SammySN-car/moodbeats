@@ -61,10 +61,9 @@
 
 ## ðŸŸ¡ HIGH â€” Important Next Steps
 
-- [ ] **Per-track "Why This Track?" explanations**
-  - Extend `ai_dj_note` from playlist-level to per-track
-  - Spotify research: recommendations with explanations have **4x higher engagement**
-  - Impact: Users understand and trust the recommendations
+- [x] **Per-track "Why This Track?" explanations**
+  - Added track_explanations list with per-track why_it_fits and playlist_fit rating
+  - Completed: 2026-09-01
 
 - [ ] **Listening History endpoint**
   - Add `GET /api/history` returning recently played tracks with timestamps
@@ -80,8 +79,8 @@
 
 ## ðŸŸ¢ MEDIUM â€” Improvements
 
-- [ ] **Adaptive hybrid weights in RAG**
-  - Current: hardcoded 0.65 dense + 0.35 sparse
+- [x] **Adaptive hybrid weights in RAG**
+  - DONE: Replaced with RRF fusion + cross-encoder sigmoid normalization
   - Abstract prompts ("rainy night vibes") â†’ weight dense higher
   - Specific prompts ("Eminem tracks") â†’ weight sparse/BM25 higher
   - Impact: Better retrieval quality per query type
@@ -133,6 +132,50 @@
 ---
 
 ## âœ… DONE
+
+### 2026-09-01 -- RAG Pipeline Upgrade (Query Planner, RRF, MMR, Explanations)
+
+New files:
+- ml/query_planner.py: Ollama decomposes prompts with HyDE, expanded queries, mood/tempo/energy extraction, mood normalization, keyword-based mood override, stale response detection with retry
+- rag_upgrade.md: Research findings and upgrade plan (15 sources)
+
+Core RAG rewrite (ml/rag_playlist_generator.py):
+- RRF fusion for dense + sparse scores (k=60)
+- Metadata pre-filter with tolerance windows (+/-15 BPM, +/-0.15 energy, fuzzy mood match)
+- MMR diversity reranking (lambda=0.7)
+- Sigmoid-normalized cross-encoder scores (60% cross-encoder + 40% RRF weighted)
+- Per-track explanations with playlist_fit rating
+
+Config (config.py):
+- TOP_K=10, RRF_K=60, MMR_LAMBDA=0.7, PLANNER_ENABLED=True, TASTE_WEIGHT=0.3
+
+Bug fixes found during testing:
+- Mood normalization: Ollama returns romantic for phonk/gym prompts. Added normalize_mood() map and _override_mood_from_keywords() with 5 keyword categories
+- Metadata tolerance: relaxed from strict exact match to +/-15 BPM and +/-0.1 energy tolerance
+- Cross-encoder scores: all negative raw scores needed sigmoid normalization to [0, 1] range
+- KV-cache poisoning: Ollama reuses previous query response. Added random nonce per call, stale detection (romantic HyDE for party prompt), retry with fresh nonce
+- HyDE correction: after mood override, HyDE description is corrected if it contradicts the new mood
+- Unicode encoding: fixed Windows cp1252 encoding errors when writing files via PowerShell
+- Response format: pytorch_database_rag_search() returns (score, song_object) tuples
+
+Schema updates (schemas.py):
+- PlaylistResponse now includes track_explanations, quality_score, quality_notes
+
+Router updates (routers/playlists.py):
+- Passes planner_plan to AI DJ
+- Returns new response fields
+
+Results (all 6 queries verified):
+- phonk drift gym -> energetic (Deadwood, Sahara, OVERDOSE)
+- chill lo-fi study -> chill (Cradles, Coffee, Death Bed)
+- sad heartbreak -> sad (Another Love, Heat Waves, Lovely)
+- summer party pop hits -> happy (Levitating, Levels, Wake Me Up) -- FIXED (was returning romantic)
+- chill romantic dinner -> romantic (All of Me, Perfect, Thinking Out Loud)
+- high energy EDM festival -> energetic (Deadwood, Sahara, OVERDOSE)
+
+Completed: 2026-09-01
+
+
 
 ### 2026-08-31 â€” Redundant Code Cleanup
 - Deleted `ml/music_corpus.py` (empty file)
