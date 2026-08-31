@@ -43,7 +43,6 @@ class Song(Base):
     # ML & Mood
     mood: Mapped[str | None] = mapped_column(String(20), index=True)
     mood_confidence: Mapped[float] = mapped_column(Float, default=0.0)
-    lyrics: Mapped[str | None] = mapped_column(Text, nullable=True)
     lyrics_sentiment: Mapped[float] = mapped_column(Float, default=0.0)
     
     # 384-dimensional dense vector stored as JSON string for instant search

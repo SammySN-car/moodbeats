@@ -1,4 +1,9 @@
 def classify_mood(audio_features: dict, lyrics_sentiment: float) -> tuple[str, float]:
+    """Classify mood from audio features + lyrics sentiment.
+    
+    Returns (mood_label, mood_strength) where strength is a rough indicator
+    of how well the features match the mood (not a real probability).
+    """
     tempo = audio_features.get("tempo", 120.0)
     energy = audio_features.get("energy", 0.5)
     valence = audio_features.get("valence", 0.5)

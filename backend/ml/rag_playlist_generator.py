@@ -10,20 +10,20 @@ from ml.embedding_service import (
     neural_cross_rerank,
     build_song_profile_text
 )
+from utils.spotify import search_itunes, verify_track_on_itunes
 
 def _normalize_song_key(title: str, artist: str = "") -> str:
     """Normalize title and artist to eliminate duplicate remixes, slowed/sped-up versions, and edits."""
-    # Remove bracketed/parenthetical text (e.g. (Remix), [Slowed + Reverb], (feat. X))
     t = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title)
     t = re.sub(r'[-–—].*$', '', t)
     t = re.sub(r'[^\w\s]', '', t).strip().lower()
 
-    # Normalize artist
     a = re.sub(r'[\(\[\{].*?[\)\]\}]', '', artist)
     a = re.sub(r'[^\w\s]', '', a).strip().lower()
     a_first = a.split()[0] if a else ""
 
     return f"{t}_{a_first}"
+
 
 def pytorch_database_rag_search(user_prompt: str, library_songs: list) -> list:
     """
@@ -81,19 +81,23 @@ def pytorch_database_rag_search(user_prompt: str, library_songs: list) -> list:
     threshold = -6.0 if len(library_songs) <= 5 else -4.0
     ranked_library_songs = [(cross_scores[i], candidate_songs[i]) for i in rerank_indices if cross_scores[i] > threshold]
 
-    # If library is small and nothing passed threshold, return the single closest relative match
     if not ranked_library_songs and len(candidate_songs) > 0 and len(library_songs) <= 5:
         best_idx = rerank_indices[0]
         ranked_library_songs = [(cross_scores[best_idx], candidate_songs[best_idx])]
 
     return ranked_library_songs
 
+
 def _clean_track_title(title: str) -> str:
     """Clean Ollama prefix formatting like 'Song 1: Tokyo Drift' -> 'Tokyo Drift'."""
     return re.sub(r'^(Song\s*\d+:?|\d+[\.\)]\s*)', '', title.strip()).strip(' "\'')
 
+
 def enrich_discovered_songs(new_song_list: list) -> list[dict]:
-    """Auto-verifies against official streaming databases, deduplicates, and fetches artwork."""
+    """Auto-verifies against iTunes, deduplicates, and fetches artwork.
+    
+    Uses consolidated search_itunes() from utils/spotify.py.
+    """
     enriched = []
     seen_keys = set()
 
@@ -111,30 +115,19 @@ def enrich_discovered_songs(new_song_list: list) -> list[dict]:
         art_url = rec.get("album_art_url")
         preview_url = rec.get("preview_url")
 
-        # Verify on official music database
+        # Verify via consolidated iTunes search
         if not art_url or not preview_url:
-            try:
-                res = requests.get(
-                    "https://itunes.apple.com/search",
-                    params={"term": f"{title} {artist}", "entity": "song", "limit": 1},
-                    headers={"User-Agent": "Mozilla/5.0"},
-                    timeout=3
-                )
-                if res.status_code == 200 and res.json().get("results"):
-                    item = res.json()["results"][0]
-                    title = item.get("trackName", title)
-                    artist = item.get("artistName", artist)
-                    art_url = item.get("artworkUrl100")
-                    preview_url = item.get("previewUrl")
-            except Exception:
-                pass
+            verified = verify_track_on_itunes(title, artist)
+            if verified:
+                title = verified["title"]
+                artist = verified["artist"]
+                art_url = verified["album_art_url"]
+                preview_url = verified["preview_url"]
 
-        # Re-check normalized key after official title resolution
         final_key = _normalize_song_key(title, artist)
         if final_key in seen_keys:
             continue
 
-        # Only include tracks verified in official streaming database
         if art_url:
             seen_keys.add(norm_key)
             seen_keys.add(final_key)
@@ -148,17 +141,19 @@ def enrich_discovered_songs(new_song_list: list) -> list[dict]:
             })
     return enriched
 
+
 def _get_dynamic_public_discoveries(user_prompt: str, limit: int = 50, existing_keys: set = None) -> list[dict]:
-    """Dynamically search verified official releases for up to 50 vibe-matching tracks without duplicates."""
+    """Dynamically search iTunes for up to 50 vibe-matching tracks without duplicates.
+    
+    Uses consolidated search_itunes() from utils/spotify.py.
+    """
     clean_query = re.sub(r'[^\w\s]', '', user_prompt)
     words = [w for w in clean_query.split() if len(w) > 2]
-    url = "https://itunes.apple.com/search"
-    headers = {"User-Agent": "Mozilla/5.0"}
 
     results = []
     seen = set(existing_keys) if existing_keys else set()
 
-    # Search queries to pull 50 diverse, unique tracks
+    # Multiple search queries to pull diverse, unique tracks
     search_queries = [
         " ".join(words[:4]),
         f"{words[0]} {words[-1]}" if len(words) > 1 else words[0],
@@ -169,40 +164,35 @@ def _get_dynamic_public_discoveries(user_prompt: str, limit: int = 50, existing_
     for sq in search_queries:
         if len(results) >= limit:
             break
-        try:
-            r = requests.get(url, params={"term": sq, "entity": "song", "limit": limit}, headers=headers, timeout=5)
-            if r.status_code == 200:
-                for item in r.json().get("results", []):
-                    title, artist = item.get("trackName", ""), item.get("artistName", "")
-                    art_url = item.get("artworkUrl100")
-                    if title and artist and art_url:
-                        k = _normalize_song_key(title, artist)
-                        if k not in seen:
-                            seen.add(k)
-                            results.append({
-                                "title": title,
-                                "artist": artist,
-                                "album_art_url": art_url,
-                                "preview_url": item.get("previewUrl")
-                            })
-                            if len(results) >= limit:
-                                break
-        except Exception:
-            continue
+        raw = search_itunes(sq, entity="song", limit=limit)
+        for item in raw:
+            title, artist = item.get("trackName", ""), item.get("artistName", "")
+            art_url = item.get("artworkUrl100")
+            if title and artist and art_url:
+                k = _normalize_song_key(title, artist)
+                if k not in seen:
+                    seen.add(k)
+                    results.append({
+                        "title": title,
+                        "artist": artist,
+                        "album_art_url": art_url,
+                        "preview_url": item.get("previewUrl")
+                    })
+                    if len(results) >= limit:
+                        break
 
     return results[:limit]
 
+
 def generate_ai_dj_synthesis(user_prompt: str, library_songs: list) -> dict:
-    """Ollama AI DJ: Arranges library songs and dynamically recommends 50 verified official songs with 0 duplicates."""
+    """Ollama AI DJ: Arranges library songs and dynamically recommends verified official songs."""
     valid_ids = [s.id for _, s in library_songs]
     tracks_str = "\n".join([
         f"- ID {s.id}: '{s.title}' by {s.artist} (Mood: {s.mood}, Tempo: {round(s.tempo or 0)} BPM, Energy: {round((s.energy or 0)*100)}%)"
         for _, s in library_songs
     ])
 
-    # Track library song keys so they are never duplicated in recommended tracks
     library_keys = {_normalize_song_key(s.title, s.artist or "") for _, s in library_songs}
-
     dynamic_discoveries = _get_dynamic_public_discoveries(user_prompt, limit=settings.MAX_NEW_DISCOVERIES, existing_keys=library_keys)
 
     fallback_result = {
@@ -254,7 +244,6 @@ Respond in valid JSON ONLY:
             cleaned_ids = [sid for sid in raw_ids if sid in valid_ids and raw_ids.count(sid) == 1]
             raw_recs = parsed.get("new_song_recommendations", [])
 
-            # Filter and deduplicate LLM raw seeds
             seen_recs = set(library_keys)
             valid_recs = []
             for r in raw_recs:
@@ -266,7 +255,6 @@ Respond in valid JSON ONLY:
                         seen_recs.add(k)
                         valid_recs.append({"title": t, "artist": a})
 
-            # Merge LLM seeds + dynamic discoveries with deduplication
             merged_recs = list(valid_recs)
             for d in dynamic_discoveries:
                 k = _normalize_song_key(d["title"], d.get("artist", ""))
