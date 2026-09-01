@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import client from '../api/client'
 import { usePlayer } from '../composables/usePlayer'
 
@@ -16,6 +16,20 @@ const spotifyUrl = ref('')
 const isImporting = ref(false)
 const importedSong = ref(null)
 const error = ref('')
+const libraryTitles = ref([])
+
+async function loadLibrary() {
+  try {
+    const songs = (await client.get('/songs')).data
+    libraryTitles.value = songs.map(s => (s.title + '|' + s.artist).toLowerCase())
+  } catch {}
+}
+
+function isInLibrary(title, artist) {
+  return libraryTitles.value.includes((title + '|' + artist).toLowerCase())
+}
+
+onMounted(loadLibrary)
 
 async function handleSearch() {
   if (!searchQuery.value.trim()) return
@@ -39,21 +53,30 @@ async function handleArtistSearch(name) {
   finally { isSearchingArtist.value = false }
 }
 
-async function importTrack(url, key) {
-  const u = url || spotifyUrl.value
-  if (!u) return
-  if (key) importingTracks.value[key] = true
-  else isImporting.value = true
+async function importiTunes(track) {
+  const key = track.title
+  importingTracks.value[key] = true
+  error.value = ''
+  try {
+    await client.post('/songs/import-itunes', { title: track.title, artist: track.artist })
+    importingTracks.value[key] = 'done'
+  } catch (err) {
+    importingTracks.value[key] = false
+    error.value = err.response?.data?.detail || 'Import failed'
+  }
+}
+
+async function importSpotifyUrl() {
+  if (!spotifyUrl.value) return
+  isImporting.value = true
   error.value = ''
   importedSong.value = null
   try {
-    importedSong.value = (await client.post('/songs/import', { spotify_url: u })).data
-    if (key) importingTracks.value[key] = 'done'
+    importedSong.value = (await client.post('/songs/import', { spotify_url: spotifyUrl.value })).data
     spotifyUrl.value = ''
   } catch (err) {
-    if (key) importingTracks.value[key] = false
     error.value = err.response?.data?.detail || 'Import failed'
-  } finally { if (!key) isImporting.value = false }
+  } finally { isImporting.value = false }
 }
 
 function isCurrentPlaying(t, m) {
@@ -105,12 +128,13 @@ function isCurrentPlaying(t, m) {
                 </div>
               </div>
             </div>
+            <div v-if="isInLibrary(t.title, t.artist)" class="in-library-badge">✓ In Library</div>
             <div class="flex-between" style="flex-wrap:wrap;gap:0.3rem;">
               <div class="flex-row" style="gap:0.3rem;">
                 <button :class="['btn btn-sm', isCurrentPlaying(t, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
                 <button :class="['btn btn-sm', isCurrentPlaying(t, 'full') ? 'btn-primary' : 'btn-secondary']" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
               </div>
-              <button :class="['btn btn-sm', importingTracks[t.title] === 'done' ? 'btn-secondary' : 'btn-primary']" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importTrack(t.spotify_url, t.title)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
+              <button :class="['btn btn-sm', importingTracks[t.title] === 'done' ? 'btn-secondary' : 'btn-primary']" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
             </div>
           </div>
         </div>
@@ -132,18 +156,21 @@ function isCurrentPlaying(t, m) {
 
       <div v-if="searchResults.length" class="results-list">
         <div v-for="(t, i) in searchResults" :key="t.spotify_id" class="result-row" :style="{ animationDelay: `${i * 0.03}s` }">
-          <div class="flex-row" style="min-width:0;flex:1;">
-            <img v-if="t.album_art_url" :src="t.album_art_url" width="38" height="38" class="song-cover" />
-            <div style="overflow:hidden;min-width:0;">
-              <div class="s-title">{{ t.title }}</div>
-              <div class="s-artist">{{ t.artist }}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;">
+            <div class="flex-row" style="min-width:0;flex:1;">
+              <img v-if="t.album_art_url" :src="t.album_art_url" width="38" height="38" class="song-cover" />
+              <div style="overflow:hidden;min-width:0;">
+                <div class="s-title">{{ t.title }}</div>
+                <div class="s-artist">{{ t.artist }}</div>
+              </div>
+            </div>
+            <div class="flex-row" style="gap:0.3rem;flex-shrink:0;">
+              <button :class="['btn btn-sm', isCurrentPlaying(t, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
+              <button :class="['btn btn-sm', isCurrentPlaying(t, 'full') ? 'btn-primary' : 'btn-secondary']" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
+              <button class="btn btn-primary btn-sm" :disabled="isImporting" @click="importiTunes(t)">{{ isImporting ? '...' : '+ Add' }}</button>
             </div>
           </div>
-          <div class="flex-row" style="gap:0.3rem;flex-shrink:0;">
-            <button :class="['btn btn-sm', isCurrentPlaying(t, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
-            <button :class="['btn btn-sm', isCurrentPlaying(t, 'full') ? 'btn-primary' : 'btn-secondary']" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
-            <button class="btn btn-primary btn-sm" :disabled="isImporting" @click="importTrack(t.spotify_url)">{{ isImporting ? '...' : '+ Add' }}</button>
-          </div>
+          <div v-if="isInLibrary(t.title, t.artist)" class="in-library-badge">✓ In Library</div>
         </div>
       </div>
 
@@ -156,7 +183,7 @@ function isCurrentPlaying(t, m) {
             <svg class="search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             <input v-model="spotifyUrl" type="url" placeholder="https://open.spotify.com/track/..." class="input-text search-input" />
           </div>
-          <button class="btn btn-primary" :disabled="isImporting || !spotifyUrl" @click="importTrack()" style="flex-shrink:0;">
+          <button class="btn btn-primary" :disabled="isImporting || !spotifyUrl" @click="importSpotifyUrl()" style="flex-shrink:0;">
             <span v-if="isImporting">Importing...</span>
             <span v-else>Import</span>
           </button>
@@ -243,9 +270,9 @@ function isCurrentPlaying(t, m) {
 
 .result-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
   padding: 0.6rem 0.85rem;
   border-radius: var(--r-md);
   background: rgba(255, 255, 255, 0.02);
@@ -269,4 +296,5 @@ function isCurrentPlaying(t, m) {
   border-radius: var(--r-md);
   padding: 0.85rem 1rem;
 }
+.in-library-badge { font-size: 0.68rem; color: #34d399; font-weight: 600; margin-top: 0.3rem; }
 </style>

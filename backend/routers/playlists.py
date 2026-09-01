@@ -1,4 +1,6 @@
 from typing import List
+import json
+import traceback
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
@@ -21,79 +23,76 @@ def generate_mood_playlist(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    user_songs = db.query(Song).filter(Song.user_id == current_user.id).all()
+    try:
+        user_songs = db.query(Song).filter(Song.user_id == current_user.id).all()
 
-    # ------------------------------------------------------------------
-    # Step 1: Query Planner — decompose the user prompt
-    # ------------------------------------------------------------------
-    # The planner extracts mood/tempo/energy constraints and generates
-    # HyDE descriptions for better retrieval.
-    # ------------------------------------------------------------------
+        if settings.PLANNER_ENABLED:
+            plan = decompose_query(payload.prompt)
+        else:
+            plan = None
 
-    if settings.PLANNER_ENABLED:
-        plan = decompose_query(payload.prompt)
-    else:
-        plan = None
+        # Load user taste vector if available
+        taste_vec = None
+        if current_user.taste_vector:
+            try:
+                taste_vec = json.loads(current_user.taste_vector)
+            except (json.JSONDecodeError, TypeError):
+                taste_vec = None
 
-    # ------------------------------------------------------------------
-    # Step 2: PyTorch Hybrid RAG Search with RRF + MMR
-    # ------------------------------------------------------------------
-    # Now uses: Query Planner -> Metadata Filter -> Dense+Sparse ->
-    #           RRF Fusion -> Cross-Encoder Rerank -> MMR Diversity
-    # ------------------------------------------------------------------
+        ranked_lib_songs = pytorch_database_rag_search(
+            payload.prompt, user_songs, taste_vector=taste_vec
+        )
 
-    ranked_lib_songs = pytorch_database_rag_search(payload.prompt, user_songs)
+        curation = generate_ai_dj_synthesis(payload.prompt, ranked_lib_songs, planner_plan=plan)
 
-    # ------------------------------------------------------------------
-    # Step 3: AI DJ Synthesis with Per-Track Explanations
-    # ------------------------------------------------------------------
-    # Now generates per-track "why_track" explanations and self-critique.
-    # ------------------------------------------------------------------
+        enriched_discoveries = enrich_discovered_songs(curation.get("new_song_recommendations", []))
 
-    curation = generate_ai_dj_synthesis(payload.prompt, ranked_lib_songs, planner_plan=plan)
+        new_playlist = Playlist(
+            user_id=current_user.id,
+            name=curation.get("playlist_title", "AI Curated Playlist"),
+            description=curation.get("ai_dj_note", f"Vibe: {payload.prompt}"),
+            source_prompt=payload.prompt,
+            is_auto=True
+        )
+        db.add(new_playlist)
+        db.commit()
+        db.refresh(new_playlist)
 
-    # ------------------------------------------------------------------
-    # Step 4: Auto-enrich Zero-Shot Discoveries with Album Covers
-    # ------------------------------------------------------------------
+        lib_song_map = {s.id: s for _, s in ranked_lib_songs}
+        ordered_ids_raw = curation.get("ordered_library_ids", [s.id for _, s in ranked_lib_songs])
 
-    enriched_discoveries = enrich_discovered_songs(curation.get("new_song_recommendations", []))
+        # The LLM may return positional indices (1, 2, 3...) instead of actual DB IDs.
+        # Map positional indices to real IDs using the ranked order.
+        ranked_id_order = [s.id for _, s in ranked_lib_songs]
+        ordered_ids = []
+        for sid in ordered_ids_raw:
+            if sid in lib_song_map:
+                # It's already a valid DB ID
+                ordered_ids.append(sid)
+            elif isinstance(sid, int) and 1 <= sid <= len(ranked_id_order):
+                # It's a positional index — convert to DB ID
+                ordered_ids.append(ranked_id_order[sid - 1])
+            elif str(sid) in lib_song_map:
+                # It's a string DB ID
+                ordered_ids.append(int(sid))
 
-    # ------------------------------------------------------------------
-    # Step 5: Save to Database
-    # ------------------------------------------------------------------
+        for idx, sid in enumerate(ordered_ids):
+            if sid in lib_song_map:
+                item = PlaylistItem(playlist_id=new_playlist.id, song_id=sid, position=idx+1)
+                db.add(item)
 
-    new_playlist = Playlist(
-        user_id=current_user.id,
-        name=curation.get("playlist_title", "AI Curated Playlist"),
-        description=curation.get("ai_dj_note", f"Vibe: {payload.prompt}"),
-        source_prompt=payload.prompt,
-        is_auto=True
-    )
-    db.add(new_playlist)
-    db.commit()
-    db.refresh(new_playlist)
+        db.commit()
+        db.refresh(new_playlist)
 
-    lib_song_map = {s.id: s for _, s in ranked_lib_songs}
-    ordered_ids = curation.get("ordered_library_ids", [s.id for _, s in ranked_lib_songs])
-
-    for idx, sid in enumerate(ordered_ids):
-        if sid in lib_song_map:
-            item = PlaylistItem(playlist_id=new_playlist.id, song_id=sid, position=idx+1)
-            db.add(item)
-
-    db.commit()
-    db.refresh(new_playlist)
-
-    # ------------------------------------------------------------------
-    # Step 6: Build response with new fields
-    # ------------------------------------------------------------------
-
-    response = PlaylistResponse.model_validate(new_playlist)
-    response.new_recommendations = [SuggestedSong(**d) for d in enriched_discoveries]
-    response.track_explanations = curation.get("track_explanations", {})
-    response.quality_score = curation.get("quality_score")
-    response.quality_notes = curation.get("quality_notes")
-    return response
+        response = PlaylistResponse.model_validate(new_playlist)
+        response.new_recommendations = [SuggestedSong(**d) for d in enriched_discoveries]
+        response.track_explanations = curation.get("track_explanations", {})
+        response.quality_score = curation.get("quality_score")
+        response.quality_notes = curation.get("quality_notes")
+        return response
+    except Exception as e:
+        traceback.print_exc()
+        raise
 
 @router.post("", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)
 def create_playlist(data: PlaylistCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

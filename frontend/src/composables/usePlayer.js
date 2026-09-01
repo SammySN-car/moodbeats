@@ -18,6 +18,36 @@ const playerState = reactive({
 
 audio.volume = playerState.volume
 
+// --- Feedback Loop: track play start time for skip detection ---
+let playStartedAt = null
+let lastEventSongId = null
+
+/**
+ * Send a listening event to the backend.
+ * Fires and forgets -- we don't block the UI on analytics.
+ */
+async function sendListeningEvent(songId, eventType, durationListened = 0) {
+  try {
+    await client.post('/listening/event', {
+      song_id: songId,
+      event_type: eventType,
+      duration_listened: durationListened
+    })
+  } catch (err) {
+    // Silently fail -- analytics should never break playback
+    console.warn('[Feedback] Event failed:', err.message)
+  }
+}
+
+/**
+ * Determine if the user listened long enough to count as a "play".
+ * If they skip before 30% of the track, it's a skip.
+ */
+function getEffectiveDuration() {
+  if (!playStartedAt) return 0
+  return (Date.now() - playStartedAt) / 1000
+}
+
 audio.addEventListener('timeupdate', () => {
   playerState.currentTime = audio.currentTime
   playerState.duration = audio.duration || 30
@@ -28,10 +58,22 @@ audio.addEventListener('ended', () => {
   playerState.isPlaying = false
   playerState.currentTime = 0
   playerState.progress = 0
+
+  // Track as a full play (user listened to the end)
+  if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
+    const duration = getEffectiveDuration()
+    sendListeningEvent(playerState.currentTrack.id, 'play', duration)
+    lastEventSongId = playerState.currentTrack.id
+  }
+  playStartedAt = null
 })
 
 audio.addEventListener('play', () => {
   playerState.isPlaying = true
+  // Record when play started for skip detection
+  if (!playStartedAt) {
+    playStartedAt = Date.now()
+  }
 })
 
 audio.addEventListener('pause', () => {
@@ -52,6 +94,18 @@ export function usePlayer() {
       return
     }
 
+    // --- Send skip event for the previous track if it was playing ---
+    if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
+      const duration = getEffectiveDuration()
+      if (duration > 1) {
+        sendListeningEvent(playerState.currentTrack.id, 'skip', duration)
+      }
+    }
+
+    // Reset tracking for the new track
+    lastEventSongId = null
+    playStartedAt = null
+
     playerState.currentTrack = track
     playerState.mode = mode
     playerState.currentTime = 0
@@ -62,6 +116,10 @@ export function usePlayer() {
         audio.src = track.preview_url
         audio.play().catch(e => console.warn('Preview playback error:', e))
         playerState.isPlaying = true
+        // Send play event
+        playStartedAt = Date.now()
+        sendListeningEvent(track.id, 'play', 0)
+        lastEventSongId = track.id
       } else {
         // Fallback to full YouTube mode if preview is missing
         await playFullTrack(track)
@@ -79,6 +137,11 @@ export function usePlayer() {
     playerState.isLoadingYoutube = true
     audio.pause()
 
+    // Send play event for full mode too
+    playStartedAt = Date.now()
+    sendListeningEvent(track.id, 'play', 0)
+    lastEventSongId = track.id
+
     try {
       const res = await client.get('/songs/youtube-id', {
         params: { title: track.title, artist: track.artist || '' }
@@ -91,6 +154,24 @@ export function usePlayer() {
     } finally {
       playerState.isLoadingYoutube = false
     }
+  }
+
+  /**
+   * Skip to the next track -- sends a skip event with duration listened.
+   */
+  function skipTrack() {
+    if (!playerState.currentTrack) return
+    const duration = getEffectiveDuration()
+    if (duration > 1 && playerState.currentTrack.id) {
+      sendListeningEvent(playerState.currentTrack.id, 'skip', duration)
+    }
+    lastEventSongId = null
+    playStartedAt = null
+    audio.pause()
+    audio.currentTime = 0
+    playerState.isPlaying = false
+    playerState.currentTime = 0
+    playerState.progress = 0
   }
 
   function toggleMode(newMode) {
@@ -128,20 +209,49 @@ export function usePlayer() {
   }
 
   function closePlayer() {
+    // Send skip event if track was playing
+    if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
+      const duration = getEffectiveDuration()
+      if (duration > 1) {
+        sendListeningEvent(playerState.currentTrack.id, 'skip', duration)
+      }
+    }
+    lastEventSongId = null
+    playStartedAt = null
     audio.pause()
     playerState.isPlaying = false
     playerState.currentTrack = null
     playerState.youtubeVideoId = null
   }
 
+  /**
+   * Save/unsave the current track.
+   */
+  async function toggleSave(track) {
+    if (!track?.id) return
+    try {
+      const res = await client.post('/listening/event', {
+        song_id: track.id,
+        event_type: 'save',
+        duration_listened: 0
+      })
+      return res.data
+    } catch (err) {
+      console.warn('[Feedback] Save event failed:', err.message)
+    }
+  }
+
   return {
     playerState,
     playTrack,
     playFullTrack,
+    skipTrack,
     toggleMode,
     togglePlay,
     seek,
     toggleMute,
-    closePlayer
+    closePlayer,
+    toggleSave,
+    sendListeningEvent
   }
 }

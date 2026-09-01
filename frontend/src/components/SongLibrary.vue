@@ -87,6 +87,11 @@ onMounted(fetchSongs)
           <span>·</span>
           <span>💃 {{ Math.round(song.danceability * 100) }}%</span>
         </div>
+        <div class="feedback-stats">
+          <span v-if="song.play_count > 0" class="fb-stat" title="Times played">▶ {{ song.play_count }}</span>
+          <span v-if="song.skip_count > 0" class="fb-stat fb-skip" title="Times skipped">⏭ {{ song.skip_count }}</span>
+          <span v-if="song.saved" class="fb-stat fb-saved" title="Saved to library">♥</span>
+        </div>
         <div class="flex-between" style="flex-wrap:wrap;gap:0.3rem;">
           <div class="flex-row" style="gap:0.3rem;">
             <button :class="['btn btn-sm', isCurrentPlaying(song, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(song, 'preview')">{{ isCurrentPlaying(song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
@@ -161,4 +166,9 @@ onMounted(fetchSongs)
 
 .del-btn { opacity: 0.4; transition: opacity 0.15s; }
 .del-btn:hover { opacity: 1; }
+
+.feedback-stats { display: flex; gap: 0.5rem; margin-top: 0.35rem; }
+.fb-stat { font-size: 0.68rem; color: var(--amber); font-weight: 600; }
+.fb-skip { color: var(--text-muted); }
+.fb-saved { color: #ef4444; }
 </style>

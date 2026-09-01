@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime
 from typing import Optional, List, Dict
 
+
 # --- Auth Schemas ---
 class UserRegister(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -26,9 +27,15 @@ class UserResponse(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # --- Song Schemas ---
 class SpotifyImportRequest(BaseModel):
     spotify_url: str = Field(..., min_length=10, examples=["https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b"])
+
+class iTunesImportRequest(BaseModel):
+    """Import a song by title + artist (searches iTunes)."""
+    title: str = Field(..., min_length=1)
+    artist: str = Field(..., min_length=1)
 
 class SpotifySearchResult(BaseModel):
     spotify_id: str
@@ -55,18 +62,26 @@ class SongResponse(BaseModel):
     mood_confidence: Optional[float] = 0.0
     lyrics_sentiment: Optional[float] = 0.0
     similarity_score: Optional[float] = None
+    # Feedback loop fields
+    play_count: Optional[int] = 0
+    skip_count: Optional[int] = 0
+    saved: Optional[bool] = False
+    last_played_at: Optional[datetime] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
 
 # --- Zero-Shot Discovery Schemas ---
 class SuggestedSong(BaseModel):
     title: str
     artist: str
+    reason: Optional[str] = None
     album_art_url: Optional[str] = None
     preview_url: Optional[str] = None
-    spotify_url: str
-    spotify_id: str
+    spotify_url: Optional[str] = None
+    spotify_id: Optional[str] = None
     neural_score: Optional[float] = None
+
 
 # --- Playlist Schemas ---
 class PlaylistCreate(BaseModel):
@@ -95,3 +110,35 @@ class PlaylistResponse(BaseModel):
 
 class MoodPromptRequest(BaseModel):
     prompt: str = Field(..., min_length=2, examples=["Late night highway drive in the rain with synthwave vibes"])
+
+
+# --- Listening / Feedback Schemas ---
+class ListeningEventRequest(BaseModel):
+    """Sent by frontend when user plays, skips, or saves a track."""
+    song_id: int
+    event_type: str = Field(..., pattern="^(play|skip|save|unsave)$")
+    duration_listened: float = Field(default=0.0, ge=0.0, description="Seconds listened before skip/end")
+
+class HistoryItem(BaseModel):
+    """A single item in listening history."""
+    id: int
+    song_id: int
+    event_type: str
+    duration_listened: float
+    created_at: datetime
+    song: SongResponse
+    model_config = ConfigDict(from_attributes=True)
+
+class ListeningEventResponse(BaseModel):
+    """Confirmation after recording an event."""
+    status: str = "ok"
+    play_count: int
+    skip_count: int
+    saved: bool
+    message: str = ""
+
+class TasteProfileResponse(BaseModel):
+    """Returned after taste vector is recomputed."""
+    has_taste: bool
+    songs_used: int
+    updated_at: Optional[datetime] = None

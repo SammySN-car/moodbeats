@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Song, User
-from schemas import SongResponse, SpotifyImportRequest, SpotifySearchResult
+from schemas import SongResponse, SpotifyImportRequest, SpotifySearchResult, iTunesImportRequest
 from utils.auth import get_current_user
 from utils.spotify import (
     parse_track_id, fetch_spotify_track_info, search_spotify_tracks,
@@ -110,6 +110,74 @@ def import_spotify_song(
         danceability=track_info["danceability"],
         valence=track_info["valence"],
         lyrics_sentiment=sentiment_score,
+        mood=mood_label,
+        mood_confidence=mood_strength,
+        embedding=json.dumps(embedding_vec)
+    )
+    db.add(new_song)
+    db.commit()
+    db.refresh(new_song)
+    return new_song
+
+
+@router.post("/import-itunes", response_model=SongResponse, status_code=status.HTTP_201_CREATED)
+def import_itunes_song(
+    payload: iTunesImportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Import a song from iTunes by title + artist search."""
+    from utils.spotify import search_itunes
+    import json
+
+    # Search iTunes
+    results = search_itunes(payload.title + " " + payload.artist, limit=1)
+    if not results:
+        raise HTTPException(status_code=404, detail="Song not found on iTunes")
+
+    track = results[0]
+    itunes_id = str(track.get("trackId", ""))
+
+    # Check duplicate
+    existing = db.query(Song).filter(
+        Song.user_id == current_user.id,
+        Song.spotify_id == itunes_id
+    ).first()
+    if existing:
+        return existing
+
+    title = track.get("trackName", payload.title)
+    artist = track.get("artistName", payload.artist)
+    preview_url = track.get("previewUrl")
+    album_art = track.get("artworkUrl100", "")
+    duration_ms = track.get("trackTimeMillis", 0)
+
+    # Basic audio features from iTunes (limited — no real analysis)
+    # Use reasonable defaults for mood classification
+    audio_features = {"tempo": 100.0, "energy": 0.5, "danceability": 0.5, "valence": 0.5}
+    mood_label, mood_strength = classify_mood(audio_features, 0.0)
+
+    # Generate embedding
+    profile_text = build_song_profile_text(
+        title=title, artist=artist, mood=mood_label,
+        tempo=100.0, energy=0.5
+    )
+    embedding_vec = get_text_embedding_tensor(profile_text)
+
+    new_song = Song(
+        user_id=current_user.id,
+        spotify_id=itunes_id,
+        spotify_url=track.get("trackViewUrl", ""),
+        title=title,
+        artist=artist,
+        album_art_url=album_art,
+        preview_url=preview_url,
+        duration_sec=duration_ms / 1000.0,
+        tempo=100.0,
+        energy=0.5,
+        danceability=0.5,
+        valence=0.5,
+        lyrics_sentiment=0.0,
         mood=mood_label,
         mood_confidence=mood_strength,
         embedding=json.dumps(embedding_vec)

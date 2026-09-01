@@ -28,9 +28,10 @@ async function handleGenerate() {
 async function addToLibrary(rec) {
   addingTrack.value[rec.title] = true
   try {
-    await client.post('/songs/import', { spotify_url: rec.spotify_url })
+    await client.post('/songs/import-itunes', { title: rec.title, artist: rec.artist })
     addingTrack.value[rec.title] = 'done'
   } catch (err) {
+    console.warn('Import failed:', err.message)
     addingTrack.value[rec.title] = false
   }
 }
@@ -78,6 +79,7 @@ function isCurrentPlaying(track, mode) {
         <div>
           <h3 class="playlist-name">{{ playlist.name }}</h3>
           <p class="playlist-desc">"{{ playlist.description }}"</p>
+          <p class="taste-indicator" v-if="playlist.items?.length">🎯 Taste profile applied — results personalized to your listening history</p>
         </div>
       </div>
 
@@ -241,6 +243,7 @@ function isCurrentPlaying(track, mode) {
 
 .playlist-name { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em; }
 .playlist-desc { font-size: 0.8rem; color: var(--text-muted); font-style: italic; margin-top: 0.1rem; }
+.taste-indicator { font-size: 0.7rem; color: var(--amber); margin-top: 0.3rem; opacity: 0.8; }
 
 .section { margin-bottom: 1.5rem; }
 

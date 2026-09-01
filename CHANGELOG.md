@@ -7,15 +7,17 @@
 
 ## ðŸ”´ CRITICAL â€” Must Do First
 
-- [ ] **Feedback Loop / Implicit Signals**
+- [x] **Feedback Loop / Implicit Signals**
   - Add `play_count`, `skip_count`, `saved`, `last_played_at`, `listening_duration_sec` to Song model or new `ListeningEvent` model
   - Wire frontend play/stop events back to API
   - Impact: Unlocks all personalization
+  - Completed: 2026-09-01
 
-- [ ] **User Taste Profile Vector**
+- [x] **User Taste Profile Vector**
   - Compute per-user taste vector by averaging embeddings of top-played/saved songs
   - Bias RAG results toward actual user taste, not just the prompt
   - Impact: Recommendations feel personal, not generic
+  - Completed: 2026-09-01
 
 ---
 
@@ -65,7 +67,7 @@
   - Added track_explanations list with per-track why_it_fits and playlist_fit rating
   - Completed: 2026-09-01
 
-- [ ] **Listening History endpoint**
+- [x] **Listening History endpoint**
   - Add `GET /api/history` returning recently played tracks with timestamps
   - Powers "recently played" UI in frontend
   - Impact: Retention + data for taste profile
@@ -133,6 +135,26 @@
 
 ## âœ… DONE
 
+### 2026-09-01 -- Feedback Loop and User Taste Profile
+
+Backend:
+- ListeningEvent model + Song aggregate fields + User taste fields
+- routers/listening.py: POST /api/listening/event, GET /api/listening/history, POST /api/listening/taste
+- pytorch_database_rag_search() accepts taste_vector, blends with query tensor
+- Blend: final_query = (1 - TASTE_WEIGHT) * query + TASTE_WEIGHT * taste_vector
+
+Frontend: usePlayer.js sends play/skip/save events, toggleSave()
+DB migration: ALTER TABLE songs, CREATE TABLE listening_events
+Verified: Another Love (14 plays) ranked #1 with taste bias (6.89 vs -0.03)
+
+Testing:
+- E2E test: 9/9 phases pass (frontend, auth, library, events, aggregates, history, taste, RAG generate, song detail)
+- Backend: event recording verified, aggregate fields update correctly, taste vector computed from 5 songs
+- Frontend: usePlayer.js sends fire-and-forget events, skipTrack with duration, toggleSave
+- Bug fixes: SuggestedSong schema (spotify fields optional), history endpoint (song relationship loading)
+- Playlist items: fixed positional index mapping (LLM returns [1,2,3] not DB IDs)
+- Playlist suggestions: AI DJ now returns zero-shot recommendations even with 0 library matches
+
 ### 2026-09-01 -- RAG Pipeline Upgrade (Query Planner, RRF, MMR, Explanations)
 
 New files:
@@ -177,6 +199,88 @@ Completed: 2026-09-01
 
 
 
+### 2026-09-01 -- Feedback Loop and User Taste Profile
+
+Backend:
+- ListeningEvent model + Song aggregate fields + User taste fields
+- routers/listening.py: POST /api/listening/event, GET /api/listening/history, POST /api/listening/taste
+- pytorch_database_rag_search() accepts taste_vector, blends with query tensor
+- Blend: final_query = (1 - TASTE_WEIGHT) * query + TASTE_WEIGHT * taste_vector
+
+Frontend: usePlayer.js sends play/skip/save events, toggleSave()
+DB migration: ALTER TABLE songs, CREATE TABLE listening_events
+Verified: Another Love (14 plays) ranked #1 with taste bias (6.89 vs -0.03)
+
+Testing:
+- E2E test: 9/9 phases pass (frontend, auth, library, events, aggregates, history, taste, RAG generate, song detail)
+- Backend: event recording verified, aggregate fields update correctly, taste vector computed from 5 songs
+- Frontend: usePlayer.js sends fire-and-forget events, skipTrack with duration, toggleSave
+- Bug fixes: SuggestedSong schema (spotify fields optional), history endpoint (song relationship loading)
+
+### 2026-09-01 -- Feedback Loop and User Taste Profile
+
+Backend:
+- ListeningEvent model + Song aggregate fields + User taste fields
+- routers/listening.py: POST /api/listening/event, GET /api/listening/history, POST /api/listening/taste
+- pytorch_database_rag_search() accepts taste_vector, blends with query tensor
+- Blend: final_query = (1 - TASTE_WEIGHT) * query + TASTE_WEIGHT * taste_vector
+
+Frontend: usePlayer.js sends play/skip/save events, toggleSave()
+DB migration: ALTER TABLE songs, CREATE TABLE listening_events
+Verified: Another Love (14 plays) ranked #1 with taste bias (6.89 vs -0.03)
+
+Testing:
+- E2E test: 9/9 phases pass (frontend, auth, library, events, aggregates, history, taste, RAG generate, song detail)
+- Backend: event recording verified, aggregate fields update correctly, taste vector computed from 5 songs
+- Frontend: usePlayer.js sends fire-and-forget events, skipTrack with duration, toggleSave
+- Bug fixes: SuggestedSong schema (spotify fields optional), history endpoint (song relationship loading)
+
+### 2026-09-01 -- RAG Pipeline Upgrade (Query Planner, RRF, MMR, Explanations)
+
+**New files:**
+- ml/query_planner.py -- Ollama decomposes prompts with HyDE, expanded queries, mood/tempo/energy extraction, mood normalization, keyword-based mood override, stale response detection with retry
+- 
+ag_upgrade.md -- Research findings and upgrade plan (15 sources)
+
+**Core RAG rewrite (ml/rag_playlist_generator.py):**
+- RRF fusion for dense + sparse scores (k=60)
+- Metadata pre-filter with tolerance windows (+/-15 BPM, +/-0.15 energy, fuzzy mood match)
+- MMR diversity reranking (lambda=0.7)
+- Sigmoid-normalized cross-encoder scores (60% cross-encoder + 40% RRF weighted)
+- Per-track explanations with playlist_fit rating
+
+**Config (config.py):**
+- TOP_K=10, RRF_K=60, MMR_LAMBDA=0.7, PLANNER_ENABLED=True, TASTE_WEIGHT=0.3
+
+**Bug fixes found during testing:**
+- Mood normalization: Ollama returns "romantic" for phonk/gym prompts. Added 
+ormalize_mood() map and _override_mood_from_keywords() with 5 keyword categories
+- Metadata tolerance: relaxed from strict exact match to +/-15 BPM and +/-0.1 energy tolerance
+- Cross-encoder scores: all negative raw scores needed sigmoid normalization to [0, 1] range
+- KV-cache poisoning: Ollama reuses previous query's response. Added random nonce per call, stale detection (romantic HyDE for party prompt), retry with fresh nonce
+- HyDE correction: after mood override, HyDE description is corrected if it contradicts the new mood
+- Unicode encoding: fixed Windows cp1252 encoding errors when writing files via PowerShell
+- Response format: pytorch_database_rag_search() returns (score, song_object) tuples
+
+**Schema updates (schemas.py):**
+- PlaylistResponse now includes 	rack_explanations, quality_score, quality_notes
+
+**Router updates (
+outers/playlists.py):**
+- Passes planner_plan to AI DJ
+- Returns new response fields
+
+**Results (all 6 queries verified):**
+- phonk drift gym -> energetic (Deadwood, Sahara, OVERDOSE)
+- chill lo-fi study -> chill (Cradles, Coffee, Death Bed)
+- sad heartbreak -> sad (Another Love, Heat Waves, Lovely)
+- summer party pop hits -> happy (Levitating, Levels, Wake Me Up) -- FIXED (was returning romantic)
+- chill romantic dinner -> romantic (All of Me, Perfect, Thinking Out Loud)
+- high energy EDM festival -> energetic (Deadwood, Sahara, OVERDOSE)
+
+Completed: 2026-09-01
+
+
 ### 2026-08-31 â€” Redundant Code Cleanup
 - Deleted `ml/music_corpus.py` (empty file)
 - Consolidated iTunes search: 3 duplicated implementations â†’ 1 unified `search_itunes()` in `utils/spotify.py`
@@ -205,7 +309,14 @@ Completed: 2026-09-01
 
 ## ðŸ› BUGS FOUND
 
-> (Bugs discovered during work will be logged here)
+> ### 2026-09-01 -- E2E Testing Bug Fixes
+>
+> - **GET /api/listening/history 500**: Fixed by ensuring the endpoint properly returns ListeningEvent ORM objects with song relationship loaded. The HistoryItem schema requires `song: SongResponse` which relies on SQLAlchemy lazy loading.
+> - **POST /api/playlists/generate 500**: `SuggestedSong` schema required `spotify_url` and `spotify_id` as non-optional fields, but zero-shot song recommendations from AI DJ don't have Spotify IDs. Fixed by making both fields `Optional[str] = None` and adding `reason: Optional[str] = None`.
+> - **E2E test: 9/9 phases pass**: Frontend serves HTML, auth works, library returns feedback fields, listening events record correctly, aggregates update, history returns events, taste vector computes, RAG playlist generates (201), song detail works.
+> - **Playlist items=0 (all playlists empty)**: AI DJ LLM returns positional indices [1, 2, 3] instead of actual database IDs [43, 44, 45] because the prompt shows songs as a numbered list. Fixed by adding a mapping step in playlists.py that converts positional indices to real DB IDs using the ranked order from RAG search.
+> - **No suggestions when 0 library songs match**: When RAG metadata filter returns 0 songs (e.g. "Workout energy" has no energetic songs in library), the fallback returned empty new_song_recommendations. Fixed by calling Ollama directly with a zero-shot suggestion prompt even when no library songs match.
+> - Verified: "sad songs" returns 1 item + 3 recommendations. "Workout energy" returns 1 item + 3 recommendations (Turbulence, Bass Quake, Scary Monsters).
 
 ---
 

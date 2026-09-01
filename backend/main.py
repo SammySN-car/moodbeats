@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from routers import auth, songs, playlists, analytics
+from routers import auth, songs, playlists, analytics, listening
 from ml.embedding_service import get_bi_encoder, get_cross_encoder
 from ml.sentiment import get_sentiment_pipeline
 
@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     print("MoodBeats PyTorch RAG API is ready!")
     yield
 
-app = FastAPI(title="MoodBeats API", version="5.1.0", lifespan=lifespan)
+app = FastAPI(title="MoodBeats API", version="6.0.0", lifespan=lifespan)
 
 # Enable CORS for Vue 3 frontend
 app.add_middleware(
@@ -33,7 +33,8 @@ app.include_router(auth.router)
 app.include_router(songs.router)
 app.include_router(playlists.router)
 app.include_router(analytics.router)
+app.include_router(listening.router)
 
 @app.get("/")
 def root():
-    return {"status": "online", "message": "Welcome to MoodBeats API (Database-Driven PyTorch RAG & Neural Reranker)"}
+    return {"status": "online", "message": "Welcome to MoodBeats API (Feedback Loop + Taste Profile + PyTorch RAG)"}
