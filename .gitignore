@@ -54,3 +54,9 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+# Backup files
+*.bak
+*.orig
+
+# Environment examples
+.env.example
