@@ -1,11 +1,11 @@
-﻿# MoodBeats Ã¢â‚¬â€ Improvement Tracker
+# MoodBeats â€” Improvement Tracker
 
 > Living document. Updated after every task.
-> Sections: **Planned** Ã¢â€ â€™ **In Progress** Ã¢â€ â€™ **Done** Ã¢â€ â€™ **Discovered (bugs/ideas)**
+> Sections: **Planned** â†’ **In Progress** â†’ **Done** â†’ **Discovered (bugs/ideas)**
 
 ---
 
-## Ã°Å¸â€Â´ CRITICAL Ã¢â‚¬â€ Must Do First
+## ðŸ”´ CRITICAL â€” Must Do First
 
 - [x] **Feedback Loop / Implicit Signals**
   - Add `play_count`, `skip_count`, `saved`, `last_played_at`, `listening_duration_sec` to Song model or new `ListeningEvent` model
@@ -21,18 +21,18 @@
 
 ---
 
-## Ã°Å¸â€”â€˜Ã¯Â¸Â REDUNDANT Ã¢â‚¬â€ Remove or Consolidate
+## ðŸ—‘ï¸ REDUNDANT â€” Remove or Consolidate
 
-- [x] **`ml/music_corpus.py` Ã¢â‚¬â€ empty file**
+- [x] **`ml/music_corpus.py` â€” empty file**
   - Deleted. 0 lines, 0 imports, 0 references.
   - Completed: 2026-08-31
 
 - [x] **iTunes search duplicated 3 times**
   - Consolidated into `utils/spotify.py` with 4 functions:
-    - `search_itunes()` Ã¢â‚¬â€ raw iTunes API (single source of truth)
-    - `search_spotify_tracks()` Ã¢â‚¬â€ normalized search results
-    - `search_artist_discography()` Ã¢â‚¬â€ artist discography with dedup
-    - `verify_track_on_itunes()` Ã¢â‚¬â€ single track verification
+    - `search_itunes()` â€” raw iTunes API (single source of truth)
+    - `search_spotify_tracks()` â€” normalized search results
+    - `search_artist_discography()` â€” artist discography with dedup
+    - `verify_track_on_itunes()` â€” single track verification
   - All callers (`routers/songs.py`, `ml/rag_playlist_generator.py`) now import from `utils/spotify.py`
   - Completed: 2026-08-31
 
@@ -45,23 +45,23 @@
   - Renamed return value from `confidence` to `mood_strength` with docstring clarifying it's not a real probability
   - Completed: 2026-08-31
 
-- [x] **Song model `lyrics` column Ã¢â‚¬â€ stored but never used after embedding**
+- [x] **Song model `lyrics` column â€” stored but never used after embedding**
   - Removed `lyrics` column from `models.py`
   - `lyrics_sentiment` still stored (used by mood classifier)
-  - Raw lyrics fetched, sentiment-analyzed, embedded into profile text Ã¢â‚¬â€ then discarded (correct behavior)
+  - Raw lyrics fetched, sentiment-analyzed, embedded into profile text â€” then discarded (correct behavior)
   - Completed: 2026-08-31
 
 - [ ] **`preview_url` stored but inconsistently used**
-  - VERIFIED: `preview_url` IS used Ã¢â‚¬â€ required by `extract_audio_features_from_preview()` to download 30s audio for feature extraction
+  - VERIFIED: `preview_url` IS used â€” required by `extract_audio_features_from_preview()` to download 30s audio for feature extraction
   - Kept. Not redundant.
 
 - [x] **Duplicate `__pycache__` directories**
-  - Handled by `.gitignore` Ã¢â‚¬â€ excluded from all git operations
+  - Handled by `.gitignore` â€” excluded from all git operations
   - Completed: 2026-08-31
 
 ---
 
-## Ã°Å¸Å¸Â¡ HIGH Ã¢â‚¬â€ Important Next Steps
+## ðŸŸ¡ HIGH â€” Important Next Steps
 
 - [x] **Per-track "Why This Track?" explanations**
   - Added track_explanations list with per-track why_it_fits and playlist_fit rating
@@ -73,18 +73,18 @@
   - Impact: Retention + data for taste profile
 
 - [ ] **Song Similarity / "More Like This"**
-  - `GET /api/songs/{id}/similar` Ã¢â‚¬â€ cosine similarity against user's other song embeddings
+  - `GET /api/songs/{id}/similar` â€” cosine similarity against user's other song embeddings
   - Very cheap (just math on existing vectors)
   - Impact: Natural discovery flow
 
 ---
 
-## Ã°Å¸Å¸Â¢ MEDIUM Ã¢â‚¬â€ Improvements
+## ðŸŸ¢ MEDIUM â€” Improvements
 
 - [x] **Adaptive hybrid weights in RAG**
   - DONE: Replaced with RRF fusion + cross-encoder sigmoid normalization
-  - Abstract prompts ("rainy night vibes") Ã¢â€ â€™ weight dense higher
-  - Specific prompts ("Eminem tracks") Ã¢â€ â€™ weight sparse/BM25 higher
+  - Abstract prompts ("rainy night vibes") â†’ weight dense higher
+  - Specific prompts ("Eminem tracks") â†’ weight sparse/BM25 higher
   - Impact: Better retrieval quality per query type
 
 - [ ] **Fast-path for simple queries**
@@ -107,7 +107,7 @@
 
 ---
 
-## Ã°Å¸â€Âµ NICE TO HAVE
+## ðŸ”µ NICE TO HAVE
 
 - [ ] **Daily Auto-Mix**
   - Generate "Daily Mix" on first login based on recent listening patterns
@@ -133,7 +133,7 @@
 
 ---
 
-## Ã¢Å“â€¦ DONE
+## âœ… DONE
 
 ### 2026-09-01 -- Feedback Loop and User Taste Profile
 
@@ -281,24 +281,24 @@ outers/playlists.py):**
 Completed: 2026-09-01
 
 
-### 2026-08-31 Ã¢â‚¬â€ Redundant Code Cleanup
+### 2026-08-31 â€” Redundant Code Cleanup
 - Deleted `ml/music_corpus.py` (empty file)
-- Consolidated iTunes search: 3 duplicated implementations Ã¢â€ â€™ 1 unified `search_itunes()` in `utils/spotify.py`
+- Consolidated iTunes search: 3 duplicated implementations â†’ 1 unified `search_itunes()` in `utils/spotify.py`
 - Added 3 new consolidated functions: `search_artist_discography()`, `verify_track_on_itunes()`, `search_spotify_tracks()`
 - Updated `routers/songs.py` to use consolidated functions
 - Updated `ml/rag_playlist_generator.py` to use consolidated functions
 - Replaced YouTube HTML scraper (50 lines regex) with `yt-dlp` (3 lines)
 - Added `yt-dlp>=2024.0.0` to `requirements.txt`
-- Renamed `mood_confidence` Ã¢â€ â€™ `mood_strength` in `mood_classifier.py` return
+- Renamed `mood_confidence` â†’ `mood_strength` in `mood_classifier.py` return
 - Removed unused `lyrics` column from Song model
-- Verified `preview_url` IS used (audio feature extraction) Ã¢â‚¬â€ kept
+- Verified `preview_url` IS used (audio feature extraction) â€” kept
 - Added `.gitignore` excluding `__pycache__`, `.pyc`, `node_modules`, `.db`
 - Added AGPL-3.0 LICENSE (full text)
 - Added README.md with architecture, API docs, setup instructions
 - Added CHANGELOG.md improvement tracker
 - Pushed to GitHub: https://github.com/SammySN-car/moodbeats
 
-### 2026-08-30 Ã¢â‚¬â€ Initial Aurora Redesign
+### 2026-08-30 â€” Initial Aurora Redesign
 - Complete Vue 3 frontend with Aurora warm-dark theme
 - FastAPI backend with PyTorch RAG pipeline
 - Hybrid search: dense embeddings + BM25 + cross-encoder rerank
@@ -307,7 +307,7 @@ Completed: 2026-09-01
 
 ---
 
-## Ã°Å¸Ââ€º BUGS FOUND
+## ðŸ› BUGS FOUND
 
 > ### 2026-09-01 -- E2E Testing Bug Fixes
 >
@@ -320,7 +320,7 @@ Completed: 2026-09-01
 
 ---
 
-## Ã°Å¸â€™Â¡ IDEAS (Unsorted)
+## ðŸ’¡ IDEAS (Unsorted)
 
 > (New ideas that come up during implementation)
 
@@ -329,5 +329,3 @@ Completed: 2026-09-01
 - Offline mode: cache song metadata and embeddings for offline browsing
 - Collaborative playlists: share playlists between users
 - Song lyrics display in the player (synced lyrics if available)
-- Updated README.md to reflect current RAG pipeline (RRF, MMR, Query Planner), new API endpoints, and project structure
-- Updated MOODBEATS_AI_CONTEXT.md to v6.0 with complete project state
