@@ -1,0 +1,45 @@
+/* MoodBeats — Layout */
+.container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem 2.5rem;
+}
+
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: var(--bg-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-container::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: 80%;
+  background: radial-gradient(ellipse, rgba(245, 158, 11, 0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.flex-row { display: flex; align-items: center; gap: 0.5rem; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}

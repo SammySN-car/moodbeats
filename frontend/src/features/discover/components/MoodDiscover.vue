@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
-import client from '../api/client'
-import { usePlayer } from '../composables/usePlayer'
+import client from '../../../api/client'
+import { usePlayer } from '../../../shared/composables/usePlayer'
 
 const { playTrack, playFullTrack, playerState } = usePlayer()
 const vibePrompt = ref('')

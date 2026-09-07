@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import client from '../api/client'
+import client from '../../api/client'
 
 const audio = new Audio()
 

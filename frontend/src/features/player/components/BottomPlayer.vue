@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { usePlayer } from '../composables/usePlayer'
+import { usePlayer } from '../../../shared/composables/usePlayer'
 
 const { playerState, togglePlay, toggleMode, seek, toggleMute, closePlayer } = usePlayer()
 const showVideo = ref(false)

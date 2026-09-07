@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { Doughnut } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
-import client from '../api/client'
+import client from '../../../api/client'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 

@@ -1,9 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
-  { path: '/login', name: 'Login', component: () => import('./views/Login.vue') },
-  { path: '/signup', name: 'Signup', component: () => import('./views/Signup.vue') },
-  { path: '/', name: 'Dashboard', component: () => import('./views/Dashboard.vue'), meta: { requiresAuth: true } },
+  {
+    path: '/',
+    component: () => import('./layouts/DefaultLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      { path: '', redirect: '/discover' },
+      { path: 'discover', name: 'Discover', component: () => import('./features/discover/views/DiscoverView.vue') },
+      { path: 'library', name: 'Library', component: () => import('./features/library/views/LibraryView.vue') },
+      { path: 'import', name: 'Import', component: () => import('./features/import/views/ImportView.vue') },
+      { path: 'analytics', name: 'Analytics', component: () => import('./features/analytics/views/AnalyticsView.vue') },
+    ]
+  },
+  {
+    path: '/',
+    component: () => import('./layouts/AuthLayout.vue'),
+    children: [
+      { path: 'login', name: 'Login', component: () => import('./features/auth/views/Login.vue') },
+      { path: 'signup', name: 'Signup', component: () => import('./features/auth/views/Signup.vue') },
+    ]
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
@@ -18,7 +35,7 @@ router.beforeEach((to) => {
     return { name: 'Login' }
   }
   if ((to.name === 'Login' || to.name === 'Signup') && token) {
-    return { name: 'Dashboard' }
+    return { name: 'Discover' }
   }
 })
 

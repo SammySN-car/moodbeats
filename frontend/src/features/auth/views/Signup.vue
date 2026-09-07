@@ -1,27 +1,27 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import client from '../api/client'
+import client from '../../../api/client'
 
 const router = useRouter()
+const name = ref('')
 const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
-async function handleLogin() {
+async function handleSignup() {
   error.value = ''
   loading.value = true
   try {
-    const res = await client.post('/auth/login', {
+    await client.post('/auth/register', {
+      name: name.value,
       email: email.value,
       password: password.value
     })
-    localStorage.setItem('token', res.data.access_token)
-    localStorage.setItem('userName', res.data.user_name)
-    router.push('/')
+    router.push('/login')
   } catch (err) {
-    error.value = err.response?.data?.detail || 'Login failed'
+    error.value = err.response?.data?.detail || 'Registration failed'
   } finally {
     loading.value = false
   }
@@ -35,44 +35,48 @@ async function handleLogin() {
         <div class="auth-logo">
           <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
             <defs>
-              <linearGradient id="loginGrad" x1="0" y1="0" x2="52" y2="52">
+              <linearGradient id="signupGrad" x1="0" y1="0" x2="52" y2="52">
                 <stop offset="0%" stop-color="#f59e0b"/>
                 <stop offset="100%" stop-color="#f97316"/>
               </linearGradient>
             </defs>
-            <rect width="52" height="52" rx="16" fill="url(#loginGrad)"/>
+            <rect width="52" height="52" rx="16" fill="url(#signupGrad)"/>
             <path d="M16 36V20L36 13V29" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
             <circle cx="16" cy="36" r="4.5" fill="#fff" opacity="0.9"/>
             <circle cx="36" cy="29" r="4.5" fill="#fff" opacity="0.9"/>
           </svg>
         </div>
-        <h1 class="auth-title">Welcome back</h1>
-        <p class="auth-sub">Sign in to your music library</p>
+        <h1 class="auth-title">Create Account</h1>
+        <p class="auth-sub">Join AI music discovery</p>
       </div>
 
-      <form @submit.prevent="handleLogin" class="auth-form">
+      <form @submit.prevent="handleSignup" class="auth-form">
+        <div class="field">
+          <label class="field-label">Name</label>
+          <input v-model="name" type="text" placeholder="Your name" class="input-text" required />
+        </div>
         <div class="field">
           <label class="field-label">Email</label>
           <input v-model="email" type="email" placeholder="you@example.com" class="input-text" required />
         </div>
         <div class="field">
           <label class="field-label">Password</label>
-          <input v-model="password" type="password" placeholder="Enter password" class="input-text" required />
+          <input v-model="password" type="password" placeholder="Min 6 characters" class="input-text" required minlength="6" />
         </div>
 
         <div v-if="error" class="alert-error">{{ error }}</div>
 
         <button type="submit" class="btn btn-primary w-full submit-btn" :disabled="loading">
-          <span v-if="loading">Signing in...</span>
-          <span v-else>Sign In</span>
+          <span v-if="loading">Creating account...</span>
+          <span v-else>Create Account</span>
         </button>
       </form>
 
       <div class="auth-sep"><span>or</span></div>
 
       <p class="auth-switch">
-        Don't have an account?
-        <router-link to="/signup">Create one</router-link>
+        Already have an account?
+        <router-link to="/login">Sign in</router-link>
       </p>
     </div>
   </div>

@@ -1,0 +1,50 @@
+/* MoodBeats — Base Reset */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  font-size: 0.88rem;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: -30%;
+  left: -10%;
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(ellipse, rgba(245, 158, 11, 0.03) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -20%;
+  right: -10%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(ellipse, rgba(251, 113, 133, 0.02) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#app { position: relative; z-index: 1; }
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(245, 158, 11, 0.35); }
+
+::selection { background: rgba(245, 158, 11, 0.3); color: #fff; }
+
+a { color: var(--amber); text-decoration: none; transition: color 0.15s; }
+a:hover { color: var(--amber-light); }
