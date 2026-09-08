@@ -1,287 +1,400 @@
-<script setup>
-import { computed, ref } from 'vue'
-import { usePlayer } from '../../../shared/composables/usePlayer'
-
-const { playerState, togglePlay, toggleMode, seek, toggleMute, closePlayer } = usePlayer()
-const showVideo = ref(false)
-
-function formatTime(s) {
-  if (isNaN(s)) return '0:00'
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${sec < 10 ? '0' : ''}${sec}`
-}
-
-const spotifyLink = computed(() => {
-  if (!playerState.currentTrack) return null
-  if (playerState.currentTrack.spotify_url) return playerState.currentTrack.spotify_url
-  if (playerState.currentTrack.spotify_id) return `https://open.spotify.com/track/${playerState.currentTrack.spotify_id}`
-  return `https://open.spotify.com/search/${playerState.currentTrack.title} ${playerState.currentTrack.artist}`
-})
-</script>
-
-<template>
-  <div v-if="playerState.currentTrack" class="aurora-player">
-    <!-- Progress -->
-    <div v-if="playerState.mode === 'preview'" class="progress-track" @click="seek">
-      <div class="progress-fill" :style="{ width: `${playerState.progress}%` }"></div>
-      <div class="progress-glow" :style="{ width: `${playerState.progress}%` }"></div>
-    </div>
-
-    <!-- YouTube -->
-    <div v-if="playerState.mode === 'full'" class="yt-wrap" :class="{ expanded: showVideo }">
-      <div v-if="playerState.isLoadingYoutube" class="yt-loading">Finding stream...</div>
-      <iframe
-        v-if="playerState.youtubeVideoId"
-        :src="`https://www.youtube.com/embed/${playerState.youtubeVideoId}?autoplay=1&enablejsapi=1&origin=http://localhost:5173`"
-        :height="showVideo ? '200' : '60'"
-        width="100%"
-        frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowfullscreen
-        class="yt-iframe"
-      ></iframe>
-    </div>
-
-    <div class="container player-inner">
-      <!-- Track Info -->
+﻿<template>
+  <section v-if="track" class="player" aria-label="Now playing">
+    <div class="player-inner">
       <div class="track-info">
-        <div class="art-wrap">
-          <img v-if="playerState.currentTrack.album_art_url" :src="playerState.currentTrack.album_art_url" width="46" height="46" class="art" />
-          <div v-else class="art-placeholder">♫</div>
-          <div v-if="playerState.isPlaying" class="playing-bars">
-            <span></span><span></span><span></span>
-          </div>
-        </div>
-        <div class="track-text">
-          <div class="track-name">{{ playerState.currentTrack.title }}</div>
-          <div class="track-artist">{{ playerState.currentTrack.artist }}</div>
+        <button
+          class="art-button"
+          type="button"
+          aria-label="Open track details"
+        >
+          <img
+            v-if="track.album_art || track.artwork || track.cover"
+            :src="track.album_art || track.artwork || track.cover"
+            :alt="`${track.title || 'Track'} artwork`"
+          />
+
+          <span v-else class="art-fallback" aria-hidden="true">
+            {{ track.title?.charAt(0) || 'M' }}
+          </span>
+
+          <span class="art-overlay" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="m9 6 8 6-8 6V6Z" />
+            </svg>
+          </span>
+        </button>
+
+        <div class="track-copy">
+          <strong>{{ track.title || 'Untitled track' }}</strong>
+          <span>{{ track.artist || 'Unknown artist' }}</span>
         </div>
       </div>
 
-      <!-- Controls -->
-      <div class="controls">
-        <div class="flex-row" style="gap: 0.35rem;">
-          <button :class="['btn btn-sm btn-pill', playerState.mode === 'preview' ? 'btn-primary' : 'btn-secondary']" @click="toggleMode('preview')">30s</button>
-          <button :class="['btn btn-sm btn-pill', playerState.mode === 'full' ? 'btn-primary' : 'btn-secondary']" @click="toggleMode('full')">Full</button>
-          <button v-if="playerState.mode === 'preview'" class="play-circle" @click="togglePlay">
-            <svg v-if="!playerState.isPlaying" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+      <div class="transport">
+        <div class="transport-buttons">
+          <button
+            class="control-button"
+            type="button"
+            aria-label="Previous track"
+            @click="emit('previous')"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m19 5-9 7 9 7V5ZM5 5v14" />
+            </svg>
+          </button>
+
+          <button
+            class="play-button"
+            type="button"
+            :aria-label="isPlaying ? 'Pause' : 'Play'"
+            @click="emit('toggle-play')"
+          >
+            <svg v-if="isPlaying" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 5v14M16 5v14" />
+            </svg>
+
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 5 10 7-10 7V5Z" />
+            </svg>
+          </button>
+
+          <button
+            class="control-button"
+            type="button"
+            aria-label="Next track"
+            @click="emit('next')"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m5 5 9 7-9 7V5Zm14 0v14" />
+            </svg>
           </button>
         </div>
-        <div class="time-row">
-          <span v-if="playerState.mode === 'preview'">{{ formatTime(playerState.currentTime) }} / {{ formatTime(playerState.duration) }}</span>
-          <span v-else class="live-badge"><span class="live-dot"></span> Live</span>
+
+        <div class="progress-row">
+          <time>{{ formatTime(currentTime) }}</time>
+
+          <input
+            class="progress"
+            type="range"
+            min="0"
+            max="100"
+            :value="progress"
+            aria-label="Track progress"
+            @input="emit('seek', Number($event.target.value))"
+          />
+
+          <time>{{ formatTime(duration) }}</time>
         </div>
       </div>
 
-      <!-- Actions -->
-      <div class="actions">
-        <button v-if="playerState.mode === 'full'" class="btn btn-sm btn-secondary" @click="showVideo = !showVideo">{{ showVideo ? 'Min' : 'Video' }}</button>
-        <a v-if="spotifyLink" :href="spotifyLink" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary spotify-link">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-          Spotify
-        </a>
-        <button v-if="playerState.mode === 'preview'" class="icon-btn" @click="toggleMute">
-          <svg v-if="!playerState.isMuted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      <div class="player-actions">
+        <button
+          class="control-button volume-button"
+          type="button"
+          :aria-label="muted ? 'Unmute' : 'Mute'"
+          @click="emit('toggle-mute')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 10v4h4l5 4V6l-5 4H4Zm12.5-2a5.5 5.5 0 0 1 0 8M16 5a9 9 0 0 1 0 14" />
+          </svg>
         </button>
-        <button class="icon-btn" @click="closePlayer">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+
+        <input
+          class="volume"
+          type="range"
+          min="0"
+          max="100"
+          :value="muted ? 0 : Math.round(volume * 100)"
+          aria-label="Volume"
+          @input="emit('update:volume', Number($event.target.value) / 100)"
+        />
+
+        <button
+          class="control-button close-button"
+          type="button"
+          aria-label="Close player"
+          @click="emit('close')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
         </button>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
+<script setup>
+const props = defineProps({
+  track: { type: Object, default: null },
+  isPlaying: { type: Boolean, default: false },
+  progress: { type: Number, default: 0 },
+  duration: { type: Number, default: 30 },
+  currentTime: { type: Number, default: 0 },
+  volume: { type: Number, default: 0.8 },
+  muted: { type: Boolean, default: false }
+})
+
+const emit = defineEmits([
+  'toggle-play',
+  'previous',
+  'next',
+  'seek',
+  'toggle-mute',
+  'close',
+  'update:volume'
+])
+
+const formatTime = (seconds) => {
+  const value = Number(seconds) || 0
+  return `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`
+}
+</script>
+
 <style scoped>
-.aurora-player {
+.player {
   position: fixed;
+  z-index: 40;
+  right: 0;
   bottom: 0;
   left: 0;
-  right: 0;
-  background: rgba(8, 8, 15, 0.94);
+  padding: 12px 22px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(17, 20, 25, 0.84);
+  box-shadow: 0 -18px 55px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-top: 1px solid var(--border);
-  z-index: 1000;
-  box-shadow: 0 -4px 40px rgba(0, 0, 0, 0.6), 0 0 80px rgba(245, 158, 11, 0.03);
-  animation: slideUp 0.3s var(--ease);
-}
-
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-
-.yt-wrap { max-width: 480px; margin: 0.5rem auto 0; padding: 0 1rem; }
-.yt-loading { text-align: center; font-size: 0.8rem; color: var(--text-muted); padding: 0.5rem; }
-.yt-iframe { border-radius: var(--r-md); }
-
-.progress-track {
-  width: 100%;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.05);
-  cursor: pointer;
-  position: relative;
-}
-
-.progress-track:hover { height: 5px; }
-
-.progress-fill {
-  height: 100%;
-  background: var(--amber);
-  border-radius: 0 2px 2px 0;
-  position: relative;
-  z-index: 2;
-}
-
-.progress-glow {
-  position: absolute;
-  top: -3px;
-  left: 0;
-  height: 9px;
-  background: var(--amber);
-  opacity: 0.25;
-  filter: blur(6px);
-  z-index: 1;
 }
 
 .player-inner {
-  display: flex;
+  max-width: 1440px;
+  min-height: 64px;
+  margin: auto;
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1fr)
+    minmax(300px, 1.25fr)
+    minmax(220px, 1fr);
   align-items: center;
-  justify-content: space-between;
-  padding: 0.6rem 1.5rem;
-  gap: 1rem;
+  gap: 26px;
 }
 
 .track-info {
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  min-width: 180px;
-  max-width: 260px;
+  gap: 12px;
 }
 
-.art-wrap { position: relative; flex-shrink: 0; }
-.art { border-radius: var(--r-sm); box-shadow: var(--shadow-sm); }
-.art-placeholder {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--r-sm);
-  background: var(--amber-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
+.art-button {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #424d5d, #d18b41);
+  color: #fff;
+  cursor: pointer;
 }
 
-.playing-bars {
+.art-button img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.art-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.art-overlay {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  display: flex;
-  gap: 1.5px;
-  align-items: flex-end;
-  height: 10px;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.playing-bars span {
-  width: 2px;
-  background: var(--amber);
-  border-radius: 1px;
-  animation: bars 0.6s ease-in-out infinite;
+.art-button:hover .art-overlay {
+  opacity: 1;
 }
 
-.playing-bars span:nth-child(1) { height: 3px; animation-delay: 0s; }
-.playing-bars span:nth-child(2) { height: 7px; animation-delay: 0.15s; }
-.playing-bars span:nth-child(3) { height: 5px; animation-delay: 0.3s; }
-
-@keyframes bars {
-  0%, 100% { height: 2px; }
-  50% { height: 10px; }
+.art-overlay svg {
+  width: 20px;
+  fill: #fff;
+  stroke: none;
 }
 
-.track-text { overflow: hidden; }
-.track-name { font-weight: 700; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.track-artist { font-size: 0.73rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.controls {
+.track-copy {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.2rem;
+  gap: 5px;
 }
 
-.play-circle {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: none;
-  background: var(--amber);
-  color: #0a0a0f;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s var(--ease);
-  box-shadow: 0 2px 14px rgba(245, 158, 11, 0.4);
+.track-copy strong,
+.track-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.play-circle:hover { transform: scale(1.1); box-shadow: 0 4px 24px rgba(245, 158, 11, 0.55); }
-
-.time-row {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
+.track-copy strong {
+  color: #f4f5f7;
+  font-size: 13px;
+  font-weight: 650;
 }
 
-.live-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: var(--green);
-  font-weight: 700;
+.track-copy span {
+  color: #8e97a6;
+  font-size: 11px;
 }
 
-.live-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--green);
-  border-radius: 50%;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.icon-btn {
+.control-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: transparent;
-  border: none;
-  color: var(--text-muted);
+  color: #8e97a6;
   cursor: pointer;
-  padding: 0.35rem;
-  border-radius: 50%;
+  transition: 0.2s ease;
+}
+
+.control-button:hover {
+  color: #f4f5f7;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.control-button svg,
+.play-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.transport {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.transport-buttons {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  gap: 10px;
 }
 
-.icon-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+.play-button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f5b942;
+  color: #17191d;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+}
 
-.spotify-link:hover { border-color: #1DB954 !important; }
+.play-button:hover {
+  background: #ffd36d;
+  transform: scale(1.06);
+}
 
-@media (max-width: 768px) {
-  .actions .spotify-link { display: none; }
-  .player-inner { padding: 0.6rem 1rem; }
+.play-button svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.1;
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #77808e;
+  font-size: 10px;
+}
+
+.progress,
+.volume {
+  height: 4px;
+  flex: 1;
+  accent-color: #f5b942;
+  cursor: pointer;
+}
+
+.player-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.volume {
+  max-width: 90px;
+}
+
+@media (max-width: 760px) {
+  .player {
+    padding: 10px 14px 13px;
+  }
+
+  .player-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+  }
+
+  .track-info {
+    width: 100%;
+  }
+
+  .transport {
+    min-width: 185px;
+    flex: 1;
+  }
+
+  .player-actions {
+    flex: 0 0 auto;
+  }
+
+  .volume-button,
+  .volume {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .progress-row {
+    gap: 5px;
+  }
+
+  .player-actions {
+    display: none;
+  }
+
+  .transport {
+    width: 100%;
+  }
 }
 </style>
