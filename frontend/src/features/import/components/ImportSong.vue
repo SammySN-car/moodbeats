@@ -17,6 +17,7 @@ const isImporting = ref(false)
 const importedSong = ref(null)
 const error = ref('')
 const libraryTitles = ref([])
+const toast = ref('')
 
 async function loadLibrary() {
   try {
@@ -36,9 +37,13 @@ async function handleSearch() {
   isSearching.value = true
   error.value = ''
   searchResults.value = []
-  try { searchResults.value = (await client.get('/songs/search', { params: { q: searchQuery.value } })).data }
-  catch (err) { error.value = err.response?.data?.detail || 'Search failed' }
-  finally { isSearching.value = false }
+  try {
+    searchResults.value = (await client.get('/songs/search', { params: { q: searchQuery.value } })).data
+  } catch (err) {
+    error.value = err.response?.data?.detail || 'Search failed'
+  } finally {
+    isSearching.value = false
+  }
 }
 
 async function handleArtistSearch(name) {
@@ -48,9 +53,13 @@ async function handleArtistSearch(name) {
   isSearchingArtist.value = true
   error.value = ''
   artistTracks.value = []
-  try { artistTracks.value = (await client.get('/songs/artist', { params: { name: q.trim(), limit: 50 } })).data }
-  catch (err) { error.value = err.response?.data?.detail || 'Search failed' }
-  finally { isSearchingArtist.value = false }
+  try {
+    artistTracks.value = (await client.get('/songs/artist', { params: { name: q.trim(), limit: 50 } })).data
+  } catch (err) {
+    error.value = err.response?.data?.detail || 'Search failed'
+  } finally {
+    isSearchingArtist.value = false
+  }
 }
 
 async function importiTunes(track) {
@@ -60,6 +69,9 @@ async function importiTunes(track) {
   try {
     await client.post('/songs/import-itunes', { title: track.title, artist: track.artist })
     importingTracks.value[key] = 'done'
+    libraryTitles.value.push((track.title + '|' + track.artist).toLowerCase())
+    toast.value = `"${track.title}" added to library!`
+    setTimeout(() => toast.value = '', 3000)
   } catch (err) {
     importingTracks.value[key] = false
     error.value = err.response?.data?.detail || 'Import failed'
@@ -74,9 +86,13 @@ async function importSpotifyUrl() {
   try {
     importedSong.value = (await client.post('/songs/import', { spotify_url: spotifyUrl.value })).data
     spotifyUrl.value = ''
+    toast.value = `"${importedSong.value.title}" imported successfully!`
+    setTimeout(() => toast.value = '', 3000)
   } catch (err) {
     error.value = err.response?.data?.detail || 'Import failed'
-  } finally { isImporting.value = false }
+  } finally {
+    isImporting.value = false
+  }
 }
 
 function isCurrentPlaying(t, m) {
@@ -85,216 +101,179 @@ function isCurrentPlaying(t, m) {
 </script>
 
 <template>
-  <div>
-    <!-- Mode Switcher -->
+  <section class="page">
+    <header class="heading">
+      <div>
+        <p class="eyebrow">GROW YOUR LIBRARY</p>
+        <h1>Import music</h1>
+        <p>Bring your favorite artists into MoodBeats.</p>
+      </div>
+    </header>
+
     <div class="mode-bar">
-      <button :class="['btn btn-sm btn-pill', searchMode === 'artist' ? 'btn-primary' : 'btn-secondary']" @click="searchMode = 'artist'">Artist Discography</button>
-      <button :class="['btn btn-sm btn-pill', searchMode === 'track' ? 'btn-primary' : 'btn-secondary']" @click="searchMode = 'track'">Track & URL</button>
+      <button :class="{ active: searchMode === 'artist' }" type="button" @click="searchMode = 'artist'">Artist Discography</button>
+      <button :class="{ active: searchMode === 'track' }" type="button" @click="searchMode = 'track'">Track & URL</button>
     </div>
 
     <!-- Artist Mode -->
-    <div v-if="searchMode === 'artist'" class="panel animate-in">
-      <div class="search-row">
-        <div class="search-wrap">
-          <svg class="search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input v-model="artistQuery" @keyup.enter="handleArtistSearch()" type="text" placeholder="Search any artist..." class="input-text search-input" />
-        </div>
-        <button class="btn btn-primary" :disabled="isSearchingArtist || !artistQuery.trim()" @click="handleArtistSearch()" style="flex-shrink:0;">
+    <div v-if="searchMode === 'artist'">
+      <form class="search" @submit.prevent="handleArtistSearch()">
+        <span>⌕</span>
+        <input v-model="artistQuery" placeholder="Search artists or tracks..." aria-label="Search artists or tracks">
+        <button type="submit" :disabled="isSearchingArtist || !artistQuery.trim()">
           <span v-if="isSearchingArtist">Searching...</span>
-          <span v-else>Explore</span>
+          <span v-else>Search</span>
         </button>
-      </div>
+      </form>
 
       <div class="quick-pills">
         <span class="pills-label">Trending:</span>
-        <button v-for="a in ['Justin Bieber', 'The Weeknd', 'Taylor Swift', 'Eminem', 'Kordhell']" :key="a" class="btn btn-secondary btn-sm btn-pill" @click="handleArtistSearch(a)">{{ a }}</button>
+        <button v-for="a in ['Justin Bieber', 'The Weeknd', 'Taylor Swift', 'Eminem', 'Kordhell']" :key="a" class="pill-btn" type="button" @click="handleArtistSearch(a)">{{ a }}</button>
       </div>
 
-      <div v-if="error" class="alert-error mt-3">{{ error }}</div>
+      <div v-if="error" class="error-banner">{{ error }}</div>
 
-      <div v-if="artistTracks.length" class="results-section">
-        <div class="section-head">
-          <span class="section-title">{{ artistQuery }}</span>
-          <span class="section-count">{{ artistTracks.length }} tracks</span>
-        </div>
-        <div class="grid-cards">
-          <div v-for="(t, i) in artistTracks" :key="t.spotify_id" class="song-card" :style="{ animationDelay: `${i * 0.03}s` }">
-            <div class="flex-between">
-              <div class="flex-row" style="min-width:0;flex:1;">
-                <img v-if="t.album_art_url" :src="t.album_art_url" width="40" height="40" class="song-cover" />
-                <div style="overflow:hidden;min-width:0;">
-                  <div class="s-title">{{ t.title }}</div>
-                  <div class="s-artist">{{ t.artist }} <span v-if="t.album_name">· {{ t.album_name }}</span></div>
-                </div>
-              </div>
-            </div>
-            <div v-if="isInLibrary(t.title, t.artist)" class="in-library-badge">✓ In Library</div>
-            <div class="flex-between" style="flex-wrap:wrap;gap:0.3rem;">
-              <div class="flex-row" style="gap:0.3rem;">
-                <button :class="['btn btn-sm', isCurrentPlaying(t, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
-                <button :class="['btn btn-sm', isCurrentPlaying(t, 'full') ? 'btn-primary' : 'btn-secondary']" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
-              </div>
-              <button :class="['btn btn-sm', importingTracks[t.title] === 'done' ? 'btn-secondary' : 'btn-primary']" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
-            </div>
+      <div v-if="isSearchingArtist" class="grid">
+        <article v-for="n in 6" :key="n" class="skeleton card"></article>
+      </div>
+
+      <div v-else-if="!artistTracks.length && !isSearchingArtist" class="empty">
+        <div>＋</div>
+        <h2>Search for an artist to import their music</h2>
+        <p>Find a discography and add the tracks you love.</p>
+      </div>
+
+      <div v-else class="grid">
+        <article v-for="t in artistTracks" :key="t.spotify_id" class="card">
+          <div class="art">
+            <img v-if="t.album_art_url" :src="t.album_art_url" :alt="`${t.title} artwork`">
+            <span v-else>{{ t.title?.charAt(0) || 'M' }}</span>
           </div>
-        </div>
+          <div class="card-copy">
+            <h2>{{ t.title }}</h2>
+            <p>{{ t.artist }} <span v-if="t.album_name">· {{ t.album_name }}</span></p>
+            <span v-if="isInLibrary(t.title, t.artist)" class="in-library">In Library</span>
+          </div>
+          <div class="card-actions">
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
+            <button class="import" type="button" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
+          </div>
+        </article>
       </div>
     </div>
 
-    <!-- Track Mode -->
-    <div v-if="searchMode === 'track'" class="panel animate-in">
-      <div class="search-row">
-        <div class="search-wrap">
-          <svg class="search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input v-model="searchQuery" @keyup.enter="handleSearch" type="text" placeholder="Search song title..." class="input-text search-input" />
-        </div>
-        <button class="btn btn-primary" :disabled="isSearching || !searchQuery.trim()" @click="handleSearch" style="flex-shrink:0;">
+    <!-- Track & URL Mode -->
+    <div v-if="searchMode === 'track'">
+      <form class="search" @submit.prevent="handleSearch">
+        <span>⌕</span>
+        <input v-model="searchQuery" placeholder="Search song title..." aria-label="Search song title">
+        <button type="submit" :disabled="isSearching || !searchQuery.trim()">
           <span v-if="isSearching">Searching...</span>
           <span v-else>Search</span>
         </button>
-      </div>
+      </form>
 
-      <div v-if="searchResults.length" class="results-list">
-        <div v-for="(t, i) in searchResults" :key="t.spotify_id" class="result-row" :style="{ animationDelay: `${i * 0.03}s` }">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;">
-            <div class="flex-row" style="min-width:0;flex:1;">
-              <img v-if="t.album_art_url" :src="t.album_art_url" width="38" height="38" class="song-cover" />
-              <div style="overflow:hidden;min-width:0;">
-                <div class="s-title">{{ t.title }}</div>
-                <div class="s-artist">{{ t.artist }}</div>
-              </div>
-            </div>
-            <div class="flex-row" style="gap:0.3rem;flex-shrink:0;">
-              <button :class="['btn btn-sm', isCurrentPlaying(t, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
-              <button :class="['btn btn-sm', isCurrentPlaying(t, 'full') ? 'btn-primary' : 'btn-secondary']" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
-              <button class="btn btn-primary btn-sm" :disabled="isImporting" @click="importiTunes(t)">{{ isImporting ? '...' : '+ Add' }}</button>
-            </div>
+      <div v-if="error" class="error-banner">{{ error }}</div>
+
+      <div v-if="searchResults.length" class="grid">
+        <article v-for="t in searchResults" :key="t.spotify_id" class="card">
+          <div class="art">
+            <img v-if="t.album_art_url" :src="t.album_art_url" :alt="`${t.title} artwork`">
+            <span v-else>{{ t.title?.charAt(0) || 'M' }}</span>
           </div>
-          <div v-if="isInLibrary(t.title, t.artist)" class="in-library-badge">✓ In Library</div>
-        </div>
+          <div class="card-copy">
+            <h2>{{ t.title }}</h2>
+            <p>{{ t.artist }}</p>
+            <span v-if="isInLibrary(t.title, t.artist)" class="in-library">In Library</span>
+          </div>
+          <div class="card-actions">
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
+            <button class="import" type="button" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
+          </div>
+        </article>
       </div>
 
       <div class="sep-line"></div>
 
       <div class="url-section">
         <h4 class="sub-title">Or paste a Spotify URL</h4>
-        <div class="search-row">
-          <div class="search-wrap">
-            <svg class="search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <input v-model="spotifyUrl" type="url" placeholder="https://open.spotify.com/track/..." class="input-text search-input" />
-          </div>
-          <button class="btn btn-primary" :disabled="isImporting || !spotifyUrl" @click="importSpotifyUrl()" style="flex-shrink:0;">
+        <form class="search" @submit.prevent="importSpotifyUrl()">
+          <span>🔗</span>
+          <input v-model="spotifyUrl" type="url" placeholder="https://open.spotify.com/track/..." aria-label="Spotify URL">
+          <button type="submit" :disabled="isImporting || !spotifyUrl">
             <span v-if="isImporting">Importing...</span>
             <span v-else>Import</span>
           </button>
-        </div>
+        </form>
       </div>
 
-      <div v-if="error" class="alert-error mt-3">{{ error }}</div>
-
-      <div v-if="importedSong" class="success-card mt-3 animate-in">
-        <div class="flex-between">
-          <div class="flex-row" style="min-width:0;flex:1;">
-            <img v-if="importedSong.album_art_url" :src="importedSong.album_art_url" width="42" height="42" class="song-cover" />
-            <div style="overflow:hidden;min-width:0;">
-              <div style="font-weight:600;">{{ importedSong.title }}</div>
-              <div class="text-secondary">{{ importedSong.artist }}</div>
-            </div>
-          </div>
-          <span :class="['badge', `badge-${importedSong.mood || 'neutral'}`]">{{ importedSong.mood }}</span>
+      <div v-if="importedSong" class="success-card">
+        <div class="art">
+          <img v-if="importedSong.album_art_url" :src="importedSong.album_art_url" :alt="`${importedSong.title} artwork`">
+          <span v-else>{{ importedSong.title?.charAt(0) || 'M' }}</span>
         </div>
+        <div class="card-copy">
+          <h2>{{ importedSong.title }}</h2>
+          <p>{{ importedSong.artist }}</p>
+        </div>
+        <span class="badge">{{ importedSong.mood || 'Chill' }}</span>
       </div>
     </div>
-  </div>
+
+    <div v-if="toast" class="toast" role="status">{{ toast }}</div>
+  </section>
 </template>
 
 <style scoped>
-.mode-bar { display: flex; gap: 0.4rem; margin-bottom: 1.25rem; }
-
-.panel {
-  background: var(--bg-overlay);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 1.5rem;
-}
-
-.search-row { display: flex; gap: 0.6rem; }
-
-.search-wrap {
-  flex: 1;
-  position: relative;
-}
-
-.search-ico {
-  position: absolute;
-  left: 0.7rem;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.search-input { padding-left: 2rem; }
-
-.quick-pills {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.85rem;
-}
-
-.pills-label {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-}
-
-.results-section { margin-top: 1.25rem; }
-
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.8rem;
-}
-
-.section-title { font-weight: 700; font-size: 0.88rem; }
-.section-count { font-size: 0.72rem; color: var(--text-muted); }
-
-.results-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; }
-
-.result-row {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.4rem;
-  padding: 0.6rem 0.85rem;
-  border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border);
-  transition: all 0.2s;
-}
-
-.result-row:hover { border-color: var(--border-hover); background: rgba(255, 255, 255, 0.04); }
-
-.sep-line { height: 1px; background: var(--border); margin: 1.5rem 0; }
-
-.url-section { display: flex; flex-direction: column; gap: 0.75rem; }
-.sub-title { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
-
-.s-title { font-weight: 600; font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.s-artist { font-size: 0.73rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.success-card {
-  background: rgba(52, 211, 153, 0.06);
-  border: 1px solid rgba(52, 211, 153, 0.2);
-  border-radius: var(--r-md);
-  padding: 0.85rem 1rem;
-}
-.in-library-badge { font-size: 0.68rem; color: #34d399; font-weight: 600; margin-top: 0.3rem; }
+.page{max-width:1100px;margin:auto}
+.heading{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:28px}
+.eyebrow{margin:0 0 8px;color:#f5b942;font-size:10px;font-weight:800;letter-spacing:.14em}
+.heading h1{margin:0;font-size:clamp(30px,5vw,44px);letter-spacing:-.055em}
+.heading p:not(.eyebrow){margin:10px 0 0;color:#8e97a6;font-size:14px}
+.mode-bar{display:flex;gap:8px;margin-bottom:22px}
+.mode-bar button{padding:10px 16px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(255,255,255,.035);color:#8e97a6;font-size:12px;font-weight:600;cursor:pointer;transition:.2s}
+.mode-bar button.active{border-color:#f5b942;background:rgba(245,185,66,.13);color:#f5b942}
+.search{display:flex;align-items:center;gap:12px;padding:5px 6px 5px 15px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(255,255,255,.035);transition:.2s}
+.search:focus-within{border-color:#f5b942;box-shadow:0 0 0 3px rgba(245,185,66,.13)}
+.search span{color:#f5b942;font-size:22px}
+.search input{min-width:0;flex:1;height:42px;border:0;outline:0;background:transparent;color:#f4f5f7;font:inherit}
+.search button{border:0;border-radius:9px;padding:11px 17px;background:#f5b942;color:#17191d;font-weight:800;cursor:pointer;transition:.2s}
+.search button:hover{background:#ffd36d}
+.search button:disabled{opacity:.45;cursor:not-allowed}
+.quick-pills{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:14px}
+.pills-label{font-size:10px;color:#687180;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.pill-btn{flex:none;padding:7px 12px;border:1px solid rgba(255,255,255,.08);border-radius:99px;background:transparent;color:#8e97a6;font-size:11px;cursor:pointer;transition:.2s}
+.pill-btn:hover{border-color:#f5b942;color:#f5b942}
+.error-banner{margin:12px 0;padding:10px 14px;border:1px solid rgba(248,113,113,.3);border-radius:10px;background:rgba(248,113,113,.08);color:#f87171;font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:25px}
+.card{position:relative;display:flex;align-items:center;gap:14px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035);transition:.2s}
+.card:hover{transform:translateY(-3px);border-color:rgba(245,185,66,.35)}
+.art{width:70px;height:70px;display:grid;place-items:center;flex:none;overflow:hidden;border-radius:8px;background:linear-gradient(135deg,#354052,#bd7939);font-size:25px;font-weight:800;color:#fff}
+.art img{width:100%;height:100%;object-fit:cover}
+.card-copy{min-width:0;flex:1}
+.card-copy h2{margin:0;overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
+.card-copy p{margin:7px 0;color:#8e97a6;font-size:11px}
+.in-library{display:inline-block;color:#34d399;font-size:10px;font-weight:600}
+.card-actions{display:flex;gap:6px;align-items:center}
+.play-btn{border:0;border-radius:7px;padding:6px 8px;background:rgba(255,255,255,.06);color:#8e97a6;font-size:11px;cursor:pointer;transition:.2s}
+.play-btn.active{background:rgba(245,185,66,.13);color:#f5b942}
+.import{border:0;border-radius:9px;padding:8px 11px;background:#f5b942;color:#17191d;font-size:11px;font-weight:800;cursor:pointer;transition:.2s}
+.import:hover{background:#ffd36d}
+.import:disabled{opacity:.45;cursor:not-allowed}
+.sep-line{height:1px;background:rgba(255,255,255,.08);margin:28px 0}
+.url-section{display:flex;flex-direction:column;gap:12px}
+.sub-title{font-size:13px;font-weight:600;color:#8e97a6;margin:0}
+.success-card{display:flex;align-items:center;gap:14px;padding:14px;margin-top:20px;border:1px solid rgba(52,211,153,.2);border-radius:12px;background:rgba(52,211,153,.06)}
+.badge{padding:5px 8px;border-radius:99px;background:rgba(245,185,66,.13);color:#f5b942;font-size:10px;font-weight:600}
+.empty{text-align:center;padding:76px 20px;border:1px dashed rgba(255,255,255,.12);border-radius:12px}
+.empty>div{color:#f5b942;font-size:44px}
+.empty h2{margin:12px 0 8px;font-size:18px}
+.empty p{margin:0;color:#8e97a6;font-size:13px}
+.toast{position:fixed;right:24px;bottom:24px;padding:13px 17px;border:1px solid rgba(52,211,153,.3);border-radius:10px;background:rgba(13,16,20,.94);color:#34d399;font-size:12px;z-index:100}
+.skeleton{background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(255,255,255,.12),rgba(255,255,255,.05));background-size:200% 100%;animation:shimmer 1.3s infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.skeleton.card{height:96px}
+@media(max-width:720px){.heading{align-items:start;flex-direction:column}.grid{grid-template-columns:1fr}.mode-bar{flex-wrap:wrap}}
 </style>

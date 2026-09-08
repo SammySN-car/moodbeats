@@ -1,25 +1,35 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
 
 const { playTrack, playFullTrack, playerState } = usePlayer()
-const vibePrompt = ref('')
+const mood = ref('')
 const isGenerating = ref(false)
 const playlist = ref(null)
 const error = ref('')
 const addingTrack = ref({})
 
-async function handleGenerate() {
-  if (!vibePrompt.value.trim()) return
+const userName = ref(localStorage.getItem('userName') || 'Listener')
+
+const timeOfDay = computed(() => {
+  const h = new Date().getHours()
+  return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'
+})
+
+const moodTags = ['Happy', 'Chill', 'Sad', 'Energetic', 'Romantic']
+
+async function handleSearch(moodText) {
+  const prompt = moodText || mood.value
+  if (!prompt.trim()) return
   isGenerating.value = true
   error.value = ''
   playlist.value = null
   try {
-    const res = await client.post('/playlists/generate', { prompt: vibePrompt.value })
+    const res = await client.post('/playlists/generate', { prompt })
     playlist.value = res.data
   } catch (err) {
-    error.value = err.response?.data?.detail || 'Failed'
+    error.value = err.response?.data?.detail || 'Failed to generate playlist'
   } finally {
     isGenerating.value = false
   }
@@ -42,221 +52,183 @@ function isCurrentPlaying(track, mode) {
 </script>
 
 <template>
-  <div>
-    <!-- Hero Search -->
-    <div class="hero glass animate-in">
-      <div class="hero-glow"></div>
-      <div class="hero-body">
-        <div class="hero-row">
-          <div class="hero-icon">✦</div>
-          <h2 class="hero-title">What do you want to feel?</h2>
+  <section class="page">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">PERSONAL DISCOVERY</p>
+        <h1>Good {{ timeOfDay }}, {{ userName }}</h1>
+        <p class="subcopy">Tell us what you want to feel. We'll find the sound.</p>
+      </div>
+      <div class="pulse" aria-hidden="true"><span></span><span></span><span></span></div>
+    </header>
+
+    <form class="mood-search" @submit.prevent="handleSearch()">
+      <span class="sparkle">✦</span>
+      <textarea v-model="mood" rows="2" placeholder="Describe your mood..." aria-label="Describe your mood"></textarea>
+      <button type="submit" :disabled="isGenerating || !mood.trim()">
+        <span v-if="isGenerating">Curating...</span>
+        <span v-else>Discover</span>
+      </button>
+    </form>
+
+    <div class="tags">
+      <button v-for="tag in moodTags" :key="tag" type="button" :class="{ selected: mood === tag }" @click="mood = tag; handleSearch(tag)">{{ tag }}</button>
+    </div>
+
+    <div v-if="error" class="error-banner">{{ error }}</div>
+
+    <div v-if="playlist" class="profile-card">
+      <div>
+        <p class="eyebrow">YOUR PLAYLIST</p>
+        <h2>{{ playlist.name }}</h2>
+        <p class="subcopy">"{{ playlist.description }}"</p>
+      </div>
+      <div v-if="playlist.items?.length" class="bars">
+        <div v-for="(item, i) in playlist.items.slice(0, 4)" :key="item.id" class="bar-row">
+          <span>{{ item.song.mood || 'Chill' }}</span>
+          <div><i :style="{ width: `${100 - i * 20}%` }"></i></div>
+          <b>{{ 100 - i * 20 }}%</b>
         </div>
-        <div class="search-row">
-          <input v-model="vibePrompt" @keyup.enter="handleGenerate" type="text" placeholder="Describe any vibe, mood, or setting..." class="input-text search-input" />
-          <button class="btn btn-primary" :disabled="isGenerating || !vibePrompt.trim()" @click="handleGenerate" style="flex-shrink:0;">
-            <span v-if="isGenerating">Curating...</span>
-            <span v-else>Discover</span>
-          </button>
-        </div>
-        <div class="pills">
-          <span class="pills-label">Try:</span>
-          <button v-for="v in ['Drift phonk', 'Midnight rain', 'Coffee jazz', 'Workout energy', 'Synthwave drive']" :key="v" class="btn btn-secondary btn-sm btn-pill" @click="vibePrompt = v; handleGenerate()">{{ v }}</button>
-        </div>
-        <div v-if="error" class="alert-error mt-3">{{ error }}</div>
       </div>
     </div>
 
-    <!-- Loading -->
-    <div v-if="isGenerating" class="loading-block animate-in">
-      <div class="spinner"></div>
-      <p class="text-secondary">Curating your playlist...</p>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">CURATED FOR YOU</p>
+        <h2>AI playlist results</h2>
+      </div>
+      <button class="ghost" type="button" @click="handleSearch()" :disabled="isGenerating">Refresh</button>
     </div>
 
-    <!-- Results -->
-    <div v-if="playlist && !isGenerating" class="animate-in">
-      <div class="playlist-hero card">
-        <div class="playlist-icon">♫</div>
+    <div v-if="isGenerating" class="grid">
+      <article v-for="n in 6" :key="n" class="song-card skeleton-card">
+        <div class="skeleton art"></div>
+        <div class="skeleton line"></div>
+        <div class="skeleton short"></div>
+      </article>
+    </div>
+
+    <div v-else-if="!playlist" class="empty">
+      <div class="empty-icon">♪</div>
+      <h2>Describe your mood to discover music</h2>
+      <p>Start with a feeling, a memory, or a moment.</p>
+    </div>
+
+    <template v-else>
+      <div v-if="playlist.items?.length" class="grid">
+        <article v-for="item in playlist.items" :key="item.id" class="song-card">
+          <div class="cover">
+            <img v-if="item.song.album_art_url" :src="item.song.album_art_url" :alt="`${item.song.title} artwork`">
+            <span v-else>{{ item.song.title?.charAt(0) || 'M' }}</span>
+            <button class="play" type="button" aria-label="Play song" @click="playTrack(item.song, 'preview')">▶</button>
+          </div>
+          <div class="song-meta">
+            <div>
+              <h3>{{ item.song.title }}</h3>
+              <p>{{ item.song.artist }}</p>
+            </div>
+          </div>
+          <span class="mood-badge">{{ item.song.mood || 'Chill' }}</span>
+          <div class="feedback">
+            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'preview') }" @click="playTrack(item.song, 'preview')">{{ isCurrentPlaying(item.song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'full') }" @click="playFullTrack(item.song)">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
+          </div>
+        </article>
+      </div>
+
+      <div v-if="playlist.new_recommendations?.length" class="section-heading" style="margin-top: 38px;">
         <div>
-          <h3 class="playlist-name">{{ playlist.name }}</h3>
-          <p class="playlist-desc">"{{ playlist.description }}"</p>
-          <p class="taste-indicator" v-if="playlist.items?.length">🎯 Taste profile applied — results personalized to your listening history</p>
+          <p class="eyebrow">RECOMMENDED</p>
+          <h2>You might also like</h2>
         </div>
       </div>
 
-      <!-- Library Section -->
-      <div v-if="playlist.items?.length" class="section">
-        <div class="section-head">
-          <h4 class="section-title">From Your Library</h4>
-          <span class="section-count">{{ playlist.items.length }} tracks</span>
-        </div>
-        <div class="grid-cards">
-          <div v-for="(item, i) in playlist.items" :key="item.id" class="song-card" :style="{ animationDelay: `${i * 0.04}s` }">
-            <div class="flex-between">
-              <div class="flex-row" style="min-width:0;flex:1;">
-                <img v-if="item.song.album_art_url" :src="item.song.album_art_url" width="40" height="40" class="song-cover" />
-                <div style="overflow:hidden;min-width:0;">
-                  <div class="s-title">{{ item.song.title }}</div>
-                  <div class="s-artist">{{ item.song.artist }}</div>
-                </div>
-              </div>
-              <span :class="['badge', `badge-${item.song.mood || 'neutral'}`]">{{ item.song.mood }}</span>
-            </div>
-            <div class="flex-row" style="gap:0.3rem;">
-              <button :class="['btn btn-sm', isCurrentPlaying(item.song, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(item.song, 'preview')">{{ isCurrentPlaying(item.song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
-              <button :class="['btn btn-sm', isCurrentPlaying(item.song, 'full') ? 'btn-primary' : 'btn-secondary']" @click="playFullTrack(item.song)">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
+      <div v-if="playlist.new_recommendations?.length" class="grid">
+        <article v-for="rec in playlist.new_recommendations" :key="rec.title" class="song-card">
+          <div class="cover">
+            <img v-if="rec.album_art_url" :src="rec.album_art_url" :alt="`${rec.title} artwork`">
+            <span v-else>{{ rec.title?.charAt(0) || 'M' }}</span>
+            <button class="play" type="button" aria-label="Play song" @click="playTrack(rec, 'preview')">▶</button>
+          </div>
+          <div class="song-meta">
+            <div>
+              <h3>{{ rec.title }}</h3>
+              <p>{{ rec.artist }}</p>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Recommendations Section -->
-      <div v-if="playlist.new_recommendations?.length" class="section">
-        <div class="section-head">
-          <h4 class="section-title">Recommended</h4>
-          <span class="section-count">{{ playlist.new_recommendations.length }} tracks</span>
-        </div>
-        <div class="grid-cards">
-          <div v-for="(rec, i) in playlist.new_recommendations" :key="rec.title" class="song-card" :style="{ animationDelay: `${i * 0.04}s` }">
-            <div class="flex-between">
-              <div class="flex-row" style="min-width:0;flex:1;">
-                <img v-if="rec.album_art_url" :src="rec.album_art_url" width="40" height="40" class="song-cover" />
-                <div style="overflow:hidden;min-width:0;">
-                  <div class="s-title">{{ rec.title }}</div>
-                  <div class="s-artist">{{ rec.artist }}</div>
-                </div>
-              </div>
-            </div>
-            <div class="flex-between" style="flex-wrap:wrap;gap:0.3rem;">
-              <div class="flex-row" style="gap:0.3rem;">
-                <button :class="['btn btn-sm', isCurrentPlaying(rec, 'preview') ? 'btn-primary' : 'btn-secondary']" @click="playTrack(rec, 'preview')">{{ isCurrentPlaying(rec, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
-                <button :class="['btn btn-sm', isCurrentPlaying(rec, 'full') ? 'btn-primary' : 'btn-secondary']" @click="playFullTrack(rec)">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
-              </div>
-              <button :class="['btn btn-sm', addingTrack[rec.title] === 'done' ? 'btn-secondary' : 'btn-primary']" :disabled="addingTrack[rec.title] === true || addingTrack[rec.title] === 'done'" @click="addToLibrary(rec)">{{ addingTrack[rec.title] === 'done' ? '✓ Saved' : addingTrack[rec.title] ? '...' : '+ Save' }}</button>
-            </div>
+          <span class="mood-badge">{{ rec.mood || 'Chill' }}</span>
+          <div class="feedback">
+            <button type="button" :class="{ active: isCurrentPlaying(rec, 'preview') }" @click="playTrack(rec, 'preview')">{{ isCurrentPlaying(rec, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(rec, 'full') }" @click="playFullTrack(rec)">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
+            <button class="import-btn" type="button" :disabled="addingTrack[rec.title] === true || addingTrack[rec.title] === 'done'" @click="addToLibrary(rec)">{{ addingTrack[rec.title] === 'done' ? '✓ Saved' : addingTrack[rec.title] ? '...' : '+ Save' }}</button>
           </div>
-        </div>
+        </article>
       </div>
-    </div>
-  </div>
+    </template>
+  </section>
 </template>
 
 <style scoped>
-.hero {
-  position: relative;
-  padding: 2rem;
-  margin-bottom: 1.5rem;
-  overflow: hidden;
-}
-
-.hero-glow {
-  position: absolute;
-  top: -60%;
-  left: -20%;
-  width: 140%;
-  height: 120%;
-  background: radial-gradient(ellipse, rgba(245, 158, 11, 0.05) 0%, transparent 60%);
-  pointer-events: none;
-}
-
-.hero-body { position: relative; z-index: 1; }
-
-.hero-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 1rem;
-}
-
-.hero-icon {
-  font-size: 1.2rem;
-  color: var(--amber);
-}
-
-.hero-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.search-row {
-  display: flex;
-  gap: 0.6rem;
-}
-
-.search-input { flex: 1; padding: 0.7rem 1rem; font-size: 0.88rem; }
-
-.pills {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.85rem;
-}
-
-.pills-label {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-}
-
-.loading-block {
-  text-align: center;
-  padding: 3rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.spinner {
-  width: 28px;
-  height: 28px;
-  border: 2.5px solid var(--border);
-  border-top-color: var(--amber);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.playlist-hero {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  margin-bottom: 1.5rem;
-}
-
-.playlist-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--r-md);
-  background: var(--amber-gradient);
-  color: #0a0a0f;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  flex-shrink: 0;
-}
-
-.playlist-name { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em; }
-.playlist-desc { font-size: 0.8rem; color: var(--text-muted); font-style: italic; margin-top: 0.1rem; }
-.taste-indicator { font-size: 0.7rem; color: var(--amber); margin-top: 0.3rem; opacity: 0.8; }
-
-.section { margin-bottom: 1.5rem; }
-
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.8rem;
-}
-
-.section-title { font-size: 0.9rem; font-weight: 700; }
-.section-count { font-size: 0.72rem; color: var(--text-muted); font-weight: 500; }
-
-.s-title { font-weight: 600; font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.s-artist { font-size: 0.73rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page{max-width:1240px;margin:auto}
+.hero{display:flex;align-items:end;justify-content:space-between;margin-bottom:30px}
+.eyebrow{margin:0 0 8px;color:#f5b942;font-size:10px;font-weight:800;letter-spacing:.14em}
+.hero h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:-.055em}
+.subcopy{margin:10px 0 0;color:#8e97a6;font-size:14px}
+.pulse{display:flex;align-items:center;gap:4px;height:42px}
+.pulse span{width:4px;border-radius:5px;background:#f5b942;animation:pulse 1.1s infinite ease-in-out}
+.pulse span:nth-child(1){height:18px}
+.pulse span:nth-child(2){height:38px;animation-delay:.15s}
+.pulse span:nth-child(3){height:25px;animation-delay:.3s}
+@keyframes pulse{50%{opacity:.4;transform:scaleY(.55)}}
+.mood-search{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035);transition:.2s}
+.mood-search:focus-within{border-color:#f5b942;box-shadow:0 0 0 3px rgba(245,185,66,.13)}
+.sparkle{color:#f5b942;font-size:22px}
+.mood-search textarea{min-width:0;flex:1;resize:none;border:0;outline:0;background:transparent;color:#f4f5f7;font:inherit;line-height:1.5}
+.mood-search textarea::placeholder{color:#687180}
+.mood-search button{padding:10px 16px;border:0;border-radius:9px;background:#f5b942;color:#17191d;font-size:12px;font-weight:800;cursor:pointer;transition:.2s}
+.mood-search button:hover{background:#ffd36d}
+.mood-search button:disabled{opacity:.5;cursor:wait}
+.tags{display:flex;gap:8px;margin:14px 0 30px;overflow:auto}
+.tags button{flex:none;padding:8px 14px;border:1px solid rgba(255,255,255,.08);border-radius:99px;background:rgba(255,255,255,.035);color:#8e97a6;font-size:12px;cursor:pointer;transition:.2s}
+.tags button:hover,.tags button.selected{border-color:#f5b942;background:rgba(245,185,66,.13);color:#f5b942}
+.error-banner{margin:12px 0;padding:10px 14px;border:1px solid rgba(248,113,113,.3);border-radius:10px;background:rgba(248,113,113,.08);color:#f87171;font-size:12px}
+.profile-card{display:flex;justify-content:space-between;gap:28px;padding:22px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035)}
+h2{margin:0;font-size:20px;letter-spacing:-.03em}
+.bars{width:min(100%,480px)}
+.bar-row{display:grid;grid-template-columns:72px 1fr 35px;align-items:center;gap:10px;margin:8px 0;color:#8e97a6;font-size:11px}
+.bar-row>div{height:5px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.08)}
+.bar-row i{display:block;height:100%;border-radius:inherit;background:#f5b942}
+.bar-row b{text-align:right;color:#f4f5f7;font-size:10px}
+.section-heading{display:flex;align-items:end;justify-content:space-between;margin:38px 0 17px}
+.section-heading h2{font-size:24px}
+.ghost{border:1px solid rgba(255,255,255,.08);padding:10px 16px;border-radius:9px;background:transparent;color:#8e97a6;font-size:12px;font-weight:800;cursor:pointer;transition:.2s}
+.ghost:hover{border-color:#f5b942;color:#f5b942}
+.ghost:disabled{opacity:.5;cursor:wait}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.song-card{min-width:0;padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035);transition:.2s}
+.song-card:hover{transform:translateY(-3px);border-color:rgba(245,185,66,.35)}
+.cover{position:relative;aspect-ratio:1;display:grid;place-items:center;overflow:hidden;border-radius:8px;background:linear-gradient(135deg,#303846,#bb793b);color:#fff;font-size:44px;font-weight:800}
+.cover img{width:100%;height:100%;object-fit:cover}
+.play{position:absolute;right:10px;bottom:10px;width:38px;height:38px;border:0;border-radius:50%;background:#f5b942;color:#17191d;opacity:0;cursor:pointer;transition:.2s}
+.song-card:hover .play{opacity:1}
+.song-meta{display:flex;justify-content:space-between;gap:8px;margin:12px 2px 8px}
+.song-meta h3{margin:0;overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
+.song-meta p{margin:5px 0 0;color:#8e97a6;font-size:11px}
+.mood-badge{display:inline-block;padding:4px 8px;border-radius:99px;background:rgba(245,185,66,.13);color:#f5b942;font-size:10px}
+.feedback{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.feedback button{padding:5px 8px;border:1px solid rgba(255,255,255,.08);border-radius:7px;background:transparent;color:#687180;font-size:10px;cursor:pointer;transition:.2s}
+.feedback button.active{border-color:#f5b942;background:rgba(245,185,66,.13);color:#f5b942}
+.import-btn{padding:5px 8px;border:1px solid #f5b942;border-radius:7px;background:rgba(245,185,66,.13);color:#f5b942;font-size:10px;cursor:pointer;font-weight:600}
+.import-btn:disabled{opacity:.5;cursor:wait}
+.empty{text-align:center;padding:70px 20px;border:1px dashed rgba(255,255,255,.12);border-radius:12px}
+.empty-icon{margin:auto auto 14px;color:#f5b942;font-size:46px}
+.empty h2{font-size:18px}
+.empty p{color:#8e97a6;font-size:13px}
+.skeleton{background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(255,255,255,.12),rgba(255,255,255,.05));background-size:200% 100%;animation:shimmer 1.3s infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.skeleton.art{aspect-ratio:1;border-radius:8px}
+.skeleton.line{width:75%;height:13px;margin:14px 0 8px;border-radius:4px}
+.skeleton.short{width:45%;height:9px;border-radius:4px}
+@media(max-width:800px){.profile-card{flex-direction:column}.bars{width:100%}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.hero{align-items:start}.pulse{display:none}.mood-search{align-items:stretch;flex-wrap:wrap}.mood-search textarea{flex-basis:calc(100% - 38px)}.mood-search button{width:100%}.grid{grid-template-columns:1fr}}
 </style>

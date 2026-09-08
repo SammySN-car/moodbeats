@@ -1,13 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Doughnut } from 'vue-chartjs'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
+import { ref, computed, onMounted } from 'vue'
 import client from '../../../api/client'
 
-ChartJS.register(ArcElement, Tooltip, Legend)
-
 const stats = ref(null)
-const moodData = ref(null)
+const moodDistribution = ref(null)
 const loading = ref(true)
 const error = ref('')
 
@@ -19,41 +15,60 @@ const moodColors = {
   romantic: '#f472b6'
 }
 
+const moodLabels = {
+  happy: 'Happy',
+  chill: 'Chill',
+  energetic: 'Energetic',
+  sad: 'Sad',
+  romantic: 'Romantic'
+}
+
+const totalMoodTracks = computed(() => {
+  if (!moodDistribution.value) return 0
+  return Object.values(moodDistribution.value).reduce((a, b) => a + b, 0)
+})
+
+const moodItems = computed(() => {
+  if (!moodDistribution.value) return []
+  return Object.entries(moodDistribution.value).map(([key, value]) => ({
+    label: moodLabels[key] || key,
+    value: Math.round((value / totalMoodTracks.value) * 100),
+    color: moodColors[key] || '#78716c'
+  }))
+})
+
+const donutStyle = computed(() => {
+  let start = 0
+  const stops = moodItems.value.map(m => {
+    const a = start
+    start += m.value * 3.6
+    return `${m.color} ${a}deg ${start}deg`
+  })
+  return { background: `conic-gradient(${stops.join(',')})` }
+})
+
+const statCards = computed(() => {
+  if (!stats.value) return []
+  return [
+    { icon: '♫', value: stats.value.total_songs, label: 'Total Songs' },
+    { icon: '🥁', value: `${stats.value.avg_tempo_bpm} BPM`, label: 'Avg Tempo' },
+    { icon: '⚡', value: `${stats.value.avg_energy_pct}%`, label: 'Avg Energy' }
+  ]
+})
+
 async function fetchAnalytics() {
   loading.value = true
   try {
-    const [s, m] = await Promise.all([client.get('/analytics/stats'), client.get('/analytics/mood-distribution')])
+    const [s, m] = await Promise.all([
+      client.get('/analytics/stats'),
+      client.get('/analytics/mood-distribution')
+    ])
     stats.value = s.data
-    const moods = m.data
-    const labels = Object.keys(moods)
-    const values = Object.values(moods)
-    const colors = labels.map(k => moodColors[k] || '#78716c')
-    moodData.value = {
-      labels: labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
-      datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverBorderWidth: 2, hoverBorderColor: 'rgba(255,255,255,0.2)', spacing: 2 }]
-    }
-  } catch { error.value = 'Failed to load analytics' }
-  finally { loading.value = false }
-}
-
-const chartOpts = {
-  responsive: true,
-  maintainAspectRatio: true,
-  cutout: '74%',
-  plugins: {
-    legend: {
-      position: 'bottom',
-      labels: { color: '#9a8f82', padding: 14, usePointStyle: true, pointStyleWidth: 8, font: { family: "'Inter',sans-serif", size: 11, weight: '500' } }
-    },
-    tooltip: {
-      backgroundColor: 'rgba(18,18,32,0.95)',
-      borderColor: 'rgba(255,255,255,0.06)',
-      borderWidth: 1,
-      titleFont: { family: "'Inter',sans-serif", weight: '600' },
-      bodyFont: { family: "'Inter',sans-serif" },
-      padding: 10,
-      cornerRadius: 8
-    }
+    moodDistribution.value = m.data
+  } catch {
+    error.value = 'Failed to load analytics'
+  } finally {
+    loading.value = false
   }
 }
 
@@ -61,137 +76,119 @@ onMounted(fetchAnalytics)
 </script>
 
 <template>
-  <div>
-    <div v-if="loading" class="loading-block"><div class="spinner"></div><p class="text-muted">Calculating stats...</p></div>
-    <div v-if="error" class="alert-error mb-4">{{ error }}</div>
+  <section class="page">
+    <header class="heading">
+      <div>
+        <p class="eyebrow">LISTENING INSIGHTS</p>
+        <h1>Your mood, measured.</h1>
+        <p>See how your listening habits move with you.</p>
+      </div>
+    </header>
 
-    <div v-if="stats && !loading" class="animate-in">
-      <div class="stats-grid mb-4">
-        <div class="stat-card">
-          <div class="stat-ico stat-ico-1">♫</div>
+    <div v-if="loading" class="loading-block">
+      <div class="spinner"></div>
+      <p>Calculating stats...</p>
+    </div>
+
+    <div v-if="error" class="error-banner">{{ error }}</div>
+
+    <div v-if="stats && !loading">
+      <div class="stats">
+        <article v-for="stat in statCards" :key="stat.label" class="stat">
+          <span class="stat-icon">{{ stat.icon }}</span>
           <div>
-            <span class="stat-label">Total Songs</span>
-            <h3 class="stat-val">{{ stats.total_songs }}</h3>
+            <strong>{{ stat.value }}</strong>
+            <p>{{ stat.label }}</p>
           </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-ico stat-ico-2">🥁</div>
-          <div>
-            <span class="stat-label">Avg Tempo</span>
-            <h3 class="stat-val">{{ stats.avg_tempo_bpm }} <span class="stat-unit">BPM</span></h3>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-ico stat-ico-3">⚡</div>
-          <div>
-            <span class="stat-label">Avg Energy</span>
-            <h3 class="stat-val">{{ stats.avg_energy_pct }}<span class="stat-unit">%</span></h3>
-          </div>
-        </div>
+        </article>
       </div>
 
-      <div v-if="moodData" class="chart-card">
-        <h4 class="chart-title">Mood Distribution</h4>
-        <div class="chart-wrap">
-          <Doughnut :data="moodData" :options="chartOpts" />
-        </div>
+      <div class="dashboard">
+        <article class="panel distribution">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">MOOD DISTRIBUTION</p>
+              <h2>What you reach for</h2>
+            </div>
+            <span class="legend-total">{{ totalMoodTracks }} tracks</span>
+          </div>
+          <div v-if="moodItems.length" class="donut-wrap">
+            <div class="donut" :style="donutStyle">
+              <div>
+                <strong>100%</strong>
+                <span>your mix</span>
+              </div>
+            </div>
+            <div class="legend">
+              <div v-for="item in moodItems" :key="item.label">
+                <i :style="{ background: item.color }"></i>
+                <span>{{ item.label }}</span>
+                <b>{{ item.value }}%</b>
+              </div>
+            </div>
+          </div>
+          <p v-else class="muted">No mood data yet. Start listening to see your distribution.</p>
+        </article>
+
+        <article class="panel recent">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">TASTE PROFILE</p>
+              <h2>Your listening fingerprint</h2>
+            </div>
+            <span class="muted">Based on your plays</span>
+          </div>
+          <div v-if="moodItems.length" class="taste-grid">
+            <div v-for="item in moodItems" :key="item.label" class="taste-row">
+              <span>{{ item.label }}</span>
+              <div><i :style="{ width: `${item.value}%` }"></i></div>
+              <b>{{ item.value }}%</b>
+            </div>
+          </div>
+          <p v-else class="muted">Your taste profile will appear here once you've listened to some music.</p>
+        </article>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.loading-block {
-  text-align: center;
-  padding: 4rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.spinner {
-  width: 24px;
-  height: 24px;
-  border: 2.5px solid var(--border);
-  border-top-color: var(--amber);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.stat-card {
-  background: var(--bg-overlay);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  transition: all 0.3s var(--ease);
-}
-
-.stat-card:hover {
-  border-color: var(--border-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md), var(--shadow-glow);
-}
-
-.stat-ico {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--r-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  flex-shrink: 0;
-}
-
-.stat-ico-1 { background: var(--amber-soft); }
-.stat-ico-2 { background: var(--mood-chill-soft); }
-.stat-ico-3 { background: var(--mood-happy-soft); }
-
-.stat-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
-
-.stat-val {
-  font-size: 1.8rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  margin-top: 0.1rem;
-}
-
-.stat-unit {
-  font-size: 0.85rem;
-  font-weight: 500;
-  opacity: 0.45;
-}
-
-.chart-card {
-  background: var(--bg-overlay);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 1.5rem;
-}
-
-.chart-title {
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 1rem;
-}
-
-.chart-wrap {
-  max-width: 340px;
-  margin: 0 auto;
-}
+.page{max-width:1180px;margin:auto}
+.heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:28px}
+.eyebrow{margin:0 0 8px;color:#f5b942;font-size:10px;font-weight:800;letter-spacing:.14em}
+.heading h1{margin:0;font-size:clamp(30px,5vw,44px);letter-spacing:-.055em}
+.heading p:not(.eyebrow){margin:10px 0 0;color:#8e97a6;font-size:14px}
+.loading-block{display:flex;flex-direction:column;align-items:center;gap:12px;padding:70px 0}
+.spinner{width:28px;height:28px;border:2.5px solid rgba(255,255,255,.08);border-top-color:#f5b942;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-block p{color:#8e97a6;font-size:13px}
+.error-banner{margin:0 0 16px;padding:10px 14px;border:1px solid rgba(248,113,113,.3);border-radius:10px;background:rgba(248,113,113,.08);color:#f87171;font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.stat{display:flex;align-items:center;gap:14px;padding:19px;border:1px solid rgba(245,185,66,.22);border-radius:12px;background:linear-gradient(135deg,rgba(255,255,255,.05),rgba(245,185,66,.04))}
+.stat-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;background:rgba(245,185,66,.13);color:#f5b942;font-size:20px}
+.stat strong{font-size:25px;letter-spacing:-.04em}
+.stat p{margin:4px 0 0;color:#8e97a6;font-size:11px}
+.dashboard{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-top:16px}
+.panel{padding:22px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035)}
+.panel-heading{display:flex;align-items:start;justify-content:space-between;gap:14px}
+.panel-heading h2{margin:0;font-size:20px;letter-spacing:-.03em}
+.legend-total,.muted{color:#8e97a6;font-size:11px}
+.donut-wrap{display:flex;align-items:center;justify-content:center;gap:35px;margin-top:28px}
+.donut{width:170px;height:170px;display:grid;place-items:center;border-radius:50%;position:relative}
+.donut:after{content:'';position:absolute;width:112px;height:112px;border-radius:50%;background:#15191e}
+.donut>div{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center}
+.donut strong{font-size:24px}
+.donut span{color:#8e97a6;font-size:10px}
+.legend{min-width:145px}
+.legend div{display:grid;grid-template-columns:10px 1fr 35px;align-items:center;gap:8px;margin:12px 0;font-size:11px}
+.legend i{width:8px;height:8px;border-radius:50%}
+.legend span{color:#8e97a6}
+.legend b{font-size:10px;text-align:right}
+.taste-grid{display:grid;grid-template-columns:repeat(2,1fr);column-gap:40px;margin-top:20px}
+.taste-row{display:grid;grid-template-columns:76px 1fr 35px;align-items:center;gap:10px;margin:12px 0;font-size:11px;color:#8e97a6}
+.taste-row>div{height:6px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.08)}
+.taste-row i{display:block;height:100%;border-radius:inherit;background:#f5b942}
+.taste-row b{font-size:10px;text-align:right;color:#f4f5f7}
+@media(max-width:760px){.stats{grid-template-columns:1fr}.dashboard{grid-template-columns:1fr}.donut-wrap{gap:15px}.taste-grid{grid-template-columns:1fr}}
+@media(max-width:460px){.heading{align-items:start;flex-direction:column}.donut-wrap{justify-content:space-between}.donut{width:140px;height:140px}.donut:after{width:92px;height:92px}}
 </style>
