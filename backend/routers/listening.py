@@ -73,7 +73,7 @@ def record_listening_event(
 def get_listening_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=500),
 ):
     """Return the user's most recent listening events with song details."""
     events = (

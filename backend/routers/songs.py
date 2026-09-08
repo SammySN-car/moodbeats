@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Song, User
@@ -26,11 +26,15 @@ def get_youtube_id(title: str, artist: Optional[str] = ""):
 
 
 @router.get("/search", response_model=List[SpotifySearchResult])
-def search_tracks(q: str, current_user: User = Depends(get_current_user)):
+def search_tracks(
+    q: str,
+    limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user)
+):
     if not q or len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
     try:
-        return search_spotify_tracks(q.strip(), limit=5)
+        return search_spotify_tracks(q.strip(), limit=limit)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Search failed: {str(e)}")
 
@@ -191,13 +195,27 @@ def import_itunes_song(
 @router.get("", response_model=List[SongResponse])
 def list_songs(
     mood: Optional[str] = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=200),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Song).filter(Song.user_id == current_user.id)
     if mood:
         query = query.filter(Song.mood == mood.lower())
-    return query.order_by(Song.created_at.desc()).all()
+    return query.order_by(Song.created_at.desc()).offset(offset).limit(limit).all()
+
+
+@router.get("/count")
+def count_songs(
+    mood: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Song).filter(Song.user_id == current_user.id)
+    if mood:
+        query = query.filter(Song.mood == mood.lower())
+    return {"count": query.count()}
 
 
 @router.get("/{song_id}", response_model=SongResponse)

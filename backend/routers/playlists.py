@@ -1,7 +1,7 @@
 from typing import List
 import json
 import traceback
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Playlist, PlaylistItem, Song, User
@@ -113,8 +113,13 @@ def create_playlist(data: PlaylistCreate, current_user: User = Depends(get_curre
     return new_playlist
 
 @router.get("", response_model=List[PlaylistResponse])
-def list_playlists(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(Playlist).filter(Playlist.user_id == current_user.id).order_by(Playlist.created_at.desc()).all()
+def list_playlists(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return db.query(Playlist).filter(Playlist.user_id == current_user.id).order_by(Playlist.created_at.desc()).offset(offset).limit(limit).all()
 
 @router.delete("/{playlist_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_playlist(playlist_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
