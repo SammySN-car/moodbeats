@@ -147,8 +147,6 @@ def hybrid_faiss_rag_search(
         query_text = f"{user_prompt}. {hyde.strip()}"
     else:
         query_text = user_prompt
-    print(f"[FAISS-RAG] Query: \"{query_text[:80]}...\"")
-
     # 1. Compute query vector
     query_tensor = get_batch_embeddings_tensor([query_text])
     if taste_vector is not None:
@@ -240,8 +238,6 @@ def pytorch_database_rag_search(
 
     # Use HyDE description if available, otherwise fall back to raw query
     embedding_query = plan["hyde_description"] if plan["hyde_description"] else user_prompt
-    print(f"[RAG] Embedding query: \"{embedding_query[:80]}...\"")
-
     # Pre-filter by metadata before expensive vector search
     filter_indices = _metadata_filter(
         library_songs,
@@ -256,7 +252,6 @@ def pytorch_database_rag_search(
         filter_indices = list(range(len(library_songs)))
     else:
         filtered_songs = [library_songs[i] for i in filter_indices]
-        print(f"[RAG] Metadata filter: {len(library_songs)} -> {len(filtered_songs)} candidates")
 
     lib_docs = []
     for s in filtered_songs:
@@ -274,7 +269,6 @@ def pytorch_database_rag_search(
         taste_tensor = torch.tensor([taste_vector], dtype=torch.float32, device=device)
         weight = settings.TASTE_WEIGHT
         prompt_tensor = (1 - weight) * prompt_tensor + weight * taste_tensor
-        print(f"[RAG] Taste blending applied (weight={weight})")
 
     if all(getattr(s, 'embedding', None) for s in filtered_songs):
         try:
@@ -288,7 +282,6 @@ def pytorch_database_rag_search(
         lib_vectors = get_batch_embeddings_tensor(lib_docs)
 
     dense_scores = torch.matmul(lib_vectors, prompt_tensor.T).squeeze(-1)
-    print(f"[RAG] Dense scores - min: {dense_scores.min():.4f}, max: {dense_scores.max():.4f}")
 
     # Sparse retrieval: BM25 lexical matching
     all_keywords = " ".join(plan.get("keywords", []))
@@ -305,11 +298,8 @@ def pytorch_database_rag_search(
     else:
         sparse_scores = torch.zeros(len(filtered_songs), device=device)
 
-    print(f"[RAG] Sparse scores - min: {sparse_scores.min():.4f}, max: {sparse_scores.max():.4f}")
-
     # Reciprocal rank fusion
     rrf_scores = reciprocal_rank_fusion(dense_scores, sparse_scores)
-    print(f"[RAG] RRF scores - min: {rrf_scores.min():.6f}, max: {rrf_scores.max():.6f}")
 
     # Cross-encoder reranking on top 2x candidates to allow MMR selection
     rrf_top_k = min(top_k * 2, len(filtered_songs))
@@ -340,7 +330,6 @@ def pytorch_database_rag_search(
         for j in range(len(rrf_top_indices))
     ]
     candidates.sort(key=lambda x: x[0], reverse=True)
-    print(f"[RAG] Cross-encoder reranked top {len(candidates)} candidates")
 
     # MMR diversity reranking
     candidate_songs = [s for _, s in candidates]
@@ -351,11 +340,6 @@ def pytorch_database_rag_search(
     candidate_embeddings = get_batch_embeddings_tensor(candidate_docs)
 
     diversified = mmr_rerank(candidates, candidate_embeddings, prompt_tensor)
-    print(f"[RAG] MMR diversified to {len(diversified)} results")
-
-    print(f"\n[RAG] Final ranking:")
-    for i, (score, song) in enumerate(diversified[:10]):
-        print(f"  {i+1}. {song.title} by {song.artist} (mood={song.mood}, {song.tempo:.0f} BPM) - score: {score:.4f}")
 
     return diversified[:top_k]
 

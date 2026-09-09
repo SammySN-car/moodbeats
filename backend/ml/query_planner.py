@@ -149,8 +149,6 @@ def decompose_query(user_prompt: str) -> dict:
     Falls back to DEFAULT_PLAN if Ollama is unavailable.
     """
 
-    print(f"[QueryPlanner] Decomposing: \"{user_prompt}\"")
-
     # ---------------------------------------------------------------
     # Build the decomposition prompt for Ollama
     # ---------------------------------------------------------------
@@ -300,21 +298,10 @@ Respond in valid JSON ONLY."""
             corrected_mood = validated_plan["mood"]
             if corrected_mood == "euphoric" and any(w in hyde_lower for w in ["romantic", "tender", "ballad", "candlelit", "intimate"]):
                 validated_plan["hyde_description"] = "An upbeat pop anthem with catchy hooks, bright synths, danceable groove for: " + user_prompt
-                print("[QueryPlanner] HyDE corrected for euphoric mood")
             elif corrected_mood == "energetic" and any(w in hyde_lower for w in ["romantic", "tender", "ballad", "soft", "mellow"]):
                 validated_plan["hyde_description"] = "A high-energy track with driving beats, powerful bass, intense atmosphere for: " + user_prompt
-                print("[QueryPlanner] HyDE corrected for energetic mood")
             elif corrected_mood == "sad" and any(w in hyde_lower for w in ["upbeat", "dance", "party", "fun", "bright"]):
                 validated_plan["hyde_description"] = "A melancholic song with emotional vocals, slow tempo, minor key, introspective atmosphere for: " + user_prompt
-                print("[QueryPlanner] HyDE corrected for sad mood")
-
-            print(f"[QueryPlanner] Mood: {validated_plan['mood']}")
-            print(f"[QueryPlanner] Tempo: {validated_plan['tempo_range']}")
-            print(f"[QueryPlanner] Energy: {validated_plan['energy_range']}")
-            print(f"[QueryPlanner] Keywords: {validated_plan['keywords']}")
-            print(f"[QueryPlanner] Expanded queries: {len(validated_plan['expanded_queries'])} queries")
-            print(f"[QueryPlanner] Search paths: {validated_plan['search_paths']}")
-            print(f"[QueryPlanner] HyDE: {validated_plan['hyde_description'][:100]}...")
 
             return validated_plan
 
