@@ -60,3 +60,9 @@ logs/
 
 # Environment examples
 .env.example
+
+# ML Large Files (rebuilt at runtime)
+backend/data/
+backend/ml/*.faiss
+backend/ml/*.pt
+backend/ml/*.bin
