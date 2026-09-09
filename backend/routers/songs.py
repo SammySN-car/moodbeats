@@ -12,7 +12,7 @@ from utils.spotify import (
 )
 from ml.lyrics_fetcher import fetch_lyrics
 from ml.sentiment import analyze_sentiment
-from ml.mood_classifier import classify_mood
+from ml.knowledge_service import knowledge_service
 from ml.embedding_service import get_text_embedding_tensor, build_song_profile_text
 
 router = APIRouter(prefix="/api/songs", tags=["Songs"])
@@ -85,9 +85,12 @@ def import_spotify_song(
         "tempo": track_info["tempo"],
         "energy": track_info["energy"],
         "danceability": track_info["danceability"],
-        "valence": track_info["valence"]
+        "valence": track_info["valence"],
+        "acousticness": track_info.get("acousticness", 0.3),
+        "instrumentalness": track_info.get("instrumentalness", 0.0),
+        "speechiness": track_info.get("speechiness", 0.05),
     }
-    mood_label, mood_strength = classify_mood(audio_features, sentiment_score)
+    mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features(audio_features)
 
     # 4. Generate 384d Dense Embedding Vector
     profile_text = build_song_profile_text(
@@ -116,7 +119,12 @@ def import_spotify_song(
         lyrics_sentiment=sentiment_score,
         mood=mood_label,
         mood_confidence=mood_strength,
-        embedding=json.dumps(embedding_vec)
+        embedding=json.dumps(embedding_vec),
+        genre=track_info.get("genre", "pop"),
+        acousticness=audio_features.get("acousticness", 0.0),
+        instrumentalness=audio_features.get("instrumentalness", 0.0),
+        speechiness=audio_features.get("speechiness", 0.0),
+        liveness=track_info.get("liveness", 0.0)
     )
     db.add(new_song)
     db.commit()
@@ -158,8 +166,16 @@ def import_itunes_song(
 
     # Basic audio features from iTunes (limited — no real analysis)
     # Use reasonable defaults for mood classification
-    audio_features = {"tempo": 100.0, "energy": 0.5, "danceability": 0.5, "valence": 0.5}
-    mood_label, mood_strength = classify_mood(audio_features, 0.0)
+    audio_features = {
+        "tempo": 100.0,
+        "energy": 0.5,
+        "danceability": 0.5,
+        "valence": 0.5,
+        "acousticness": 0.3,
+        "instrumentalness": 0.0,
+        "speechiness": 0.05,
+    }
+    mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features(audio_features)
 
     # Generate embedding
     profile_text = build_song_profile_text(
@@ -184,7 +200,8 @@ def import_itunes_song(
         lyrics_sentiment=0.0,
         mood=mood_label,
         mood_confidence=mood_strength,
-        embedding=json.dumps(embedding_vec)
+        embedding=json.dumps(embedding_vec),
+        genre=track.get("primaryGenreName", "pop")
     )
     db.add(new_song)
     db.commit()
@@ -216,6 +233,34 @@ def count_songs(
     if mood:
         query = query.filter(Song.mood == mood.lower())
     return {"count": query.count()}
+
+
+@router.get("/album-art")
+def get_album_art(
+    title: str,
+    artist: str,
+):
+    """Fetch album art from iTunes on-demand."""
+    from utils.spotify import search_itunes
+    query = f"{title} {artist}"
+    results = search_itunes(query, entity="song", limit=1)
+    if results and results[0].get("artworkUrl100"):
+        return {"album_art_url": results[0]["artworkUrl100"]}
+    return {"album_art_url": None}
+
+
+@router.get("/preview-url")
+def get_preview_url(
+    title: str,
+    artist: str,
+):
+    """Fetch 30s preview URL from iTunes on-demand."""
+    from utils.spotify import search_itunes
+    query = f"{title} {artist}"
+    results = search_itunes(query, entity="song", limit=1)
+    if results and results[0].get("previewUrl"):
+        return {"preview_url": results[0]["previewUrl"]}
+    return {"preview_url": None}
 
 
 @router.get("/{song_id}", response_model=SongResponse)

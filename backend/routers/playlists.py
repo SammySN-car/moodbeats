@@ -8,10 +8,12 @@ from models import Playlist, PlaylistItem, Song, User
 from schemas import PlaylistCreate, PlaylistResponse, MoodPromptRequest, SuggestedSong
 from utils.auth import get_current_user
 from ml.rag_playlist_generator import (
+    hybrid_faiss_rag_search,
     pytorch_database_rag_search,
     enrich_discovered_songs,
     generate_ai_dj_synthesis
 )
+from ml.faiss_service import faiss_service
 from ml.query_planner import decompose_query
 from config import settings
 
@@ -39,9 +41,18 @@ def generate_mood_playlist(
             except (json.JSONDecodeError, TypeError):
                 taste_vec = None
 
-        ranked_lib_songs = pytorch_database_rag_search(
-            payload.prompt, user_songs, taste_vector=taste_vec
-        )
+        ranked_lib_songs = []
+        if faiss_service.is_loaded:
+            ranked_lib_songs = hybrid_faiss_rag_search(
+                payload.prompt, db, user_id=current_user.id,
+                planner_plan=plan, taste_vector=taste_vec
+            )
+        
+        # Resilient fallback if FAISS is unbuilt or returns empty
+        if not ranked_lib_songs:
+            ranked_lib_songs = pytorch_database_rag_search(
+                payload.prompt, user_songs, planner_plan=plan, taste_vector=taste_vec
+            )
 
         curation = generate_ai_dj_synthesis(payload.prompt, ranked_lib_songs, planner_plan=plan)
 
