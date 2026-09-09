@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+﻿import { reactive } from 'vue'
 import client from '../../api/client'
 
 const audio = new Audio()
@@ -13,7 +13,9 @@ const playerState = reactive({
   volume: 0.8,
   isMuted: false,
   youtubeVideoId: null,
-  isLoadingYoutube: false
+  isLoadingYoutube: false,
+  queue: [],
+  queueIndex: -1
 })
 
 audio.volume = playerState.volume
@@ -81,6 +83,19 @@ audio.addEventListener('pause', () => {
 })
 
 export function usePlayer() {
+  // Auto-play next track when current ends (only register once)
+  if (!audio._autoPlayRegistered) {
+    audio._autoPlayRegistered = true
+    audio.addEventListener('ended', () => {
+      if (playerState.queue.length > 0) {
+        const nextIdx = playerState.queueIndex + 1
+        if (nextIdx < playerState.queue.length) {
+          playTrack(playerState.queue[nextIdx], playerState.mode)
+        }
+      }
+    })
+  }
+
   async function playTrack(track, mode = 'preview') {
     if (!track) return
 
@@ -107,21 +122,37 @@ export function usePlayer() {
     playStartedAt = null
 
     playerState.currentTrack = track
+    // Update queue index if track is in queue
+    const qIdx = playerState.queue.findIndex(t => t.id === track.id)
+    if (qIdx !== -1) playerState.queueIndex = qIdx
     playerState.mode = mode
     playerState.currentTime = 0
     playerState.progress = 0
 
     if (mode === 'preview') {
-      if (track.preview_url) {
-        audio.src = track.preview_url
+      let previewUrl = track.preview_url
+      
+      // Fetch from iTunes on-demand if preview_url is missing
+      if (!previewUrl) {
+        try {
+          const res = await client.get('/songs/preview-url', {
+            params: { title: track.title, artist: track.artist || '' }
+          })
+          previewUrl = res.data?.preview_url
+        } catch (e) {
+          console.warn('Could not fetch preview URL:', e)
+        }
+      }
+      
+      if (previewUrl) {
+        audio.src = previewUrl
         audio.play().catch(e => console.warn('Preview playback error:', e))
         playerState.isPlaying = true
-        // Send play event
         playStartedAt = Date.now()
         sendListeningEvent(track.id, 'play', 0)
         lastEventSongId = track.id
       } else {
-        // Fallback to full YouTube mode if preview is missing
+        // Fallback to full YouTube mode if no preview available
         await playFullTrack(track)
       }
     } else {
@@ -224,6 +255,29 @@ export function usePlayer() {
     playerState.youtubeVideoId = null
   }
 
+  function setQueue(tracks, startIndex = 0) {
+    playerState.queue = tracks
+    playerState.queueIndex = startIndex
+  }
+
+  function nextInQueue() {
+    if (playerState.queue.length === 0) return
+    const nextIdx = playerState.queueIndex + 1
+    if (nextIdx < playerState.queue.length) {
+      playerState.queueIndex = nextIdx
+      playTrack(playerState.queue[nextIdx], playerState.mode)
+    }
+  }
+
+  function prevInQueue() {
+    if (playerState.queue.length === 0) return
+    const prevIdx = playerState.queueIndex - 1
+    if (prevIdx >= 0) {
+      playerState.queueIndex = prevIdx
+      playTrack(playerState.queue[prevIdx], playerState.mode)
+    }
+  }
+
   /**
    * Save/unsave the current track.
    */
@@ -252,6 +306,10 @@ export function usePlayer() {
     toggleMute,
     closePlayer,
     toggleSave,
-    sendListeningEvent
+    sendListeningEvent,
+    setQueue,
+    nextInQueue,
+    prevInQueue
   }
 }
+

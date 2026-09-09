@@ -1,123 +1,63 @@
-﻿<template>
+<template>
   <section v-if="track" class="player" aria-label="Now playing">
     <div class="player-inner">
       <div class="track-info">
-        <button
-          class="art-button"
-          type="button"
-          aria-label="Open track details"
-        >
+        <button class="art-button" type="button" aria-label="Open track details">
           <img
-            v-if="track.album_art || track.artwork || track.cover"
-            :src="track.album_art || track.artwork || track.cover"
+            v-if="track.album_art_url || track.album_art || albumArt"
+            :src="track.album_art_url || track.album_art || albumArt"
             :alt="`${track.title || 'Track'} artwork`"
+            loading="lazy"
           />
-
-          <span v-else class="art-fallback" aria-hidden="true">
+          <span v-else class="art-fallback" :style="{ background: artGradient }">
             {{ track.title?.charAt(0) || 'M' }}
-          </span>
-
-          <span class="art-overlay" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="m9 6 8 6-8 6V6Z" />
-            </svg>
           </span>
         </button>
 
         <div class="track-copy">
           <strong>{{ track.title || 'Untitled track' }}</strong>
           <span>{{ track.artist || 'Unknown artist' }}</span>
+          <span class="mode-badge">{{ mode === 'full' ? 'Full Song' : '30s Preview' }}</span>
         </div>
       </div>
 
       <div class="transport">
         <div class="transport-buttons">
-          <button
-            class="control-button"
-            type="button"
-            aria-label="Previous track"
-            @click="emit('previous')"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m19 5-9 7 9 7V5ZM5 5v14" />
-            </svg>
+          <button class="control-button" type="button" aria-label="Previous track" @click="emit('previous')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m19 5-9 7 9 7V5ZM5 5v14"/></svg>
           </button>
 
-          <button
-            class="play-button"
-            type="button"
-            :aria-label="isPlaying ? 'Pause' : 'Play'"
-            @click="emit('toggle-play')"
-          >
-            <svg v-if="isPlaying" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5v14M16 5v14" />
-            </svg>
-
-            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m9 5 10 7-10 7V5Z" />
-            </svg>
+          <button class="play-button" type="button" :aria-label="isPlaying ? 'Pause' : 'Play'" @click="emit('toggle-play')">
+            <svg v-if="isPlaying" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 10 7-10 7V5Z"/></svg>
           </button>
 
-          <button
-            class="control-button"
-            type="button"
-            aria-label="Next track"
-            @click="emit('next')"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m5 5 9 7-9 7V5Zm14 0v14" />
-            </svg>
+          <button class="control-button" type="button" aria-label="Next track" @click="emit('next')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 9 7-9 7V5Zm14 0v14"/></svg>
           </button>
         </div>
 
         <div class="progress-row">
           <time>{{ formatTime(currentTime) }}</time>
-
-          <input
-            class="progress"
-            type="range"
-            min="0"
-            max="100"
-            :value="progress"
-            aria-label="Track progress"
-            @input="emit('seek', Number($event.target.value))"
-          />
-
+          <input class="progress" type="range" min="0" max="100" :value="progress" aria-label="Track progress" @input="emit('seek', Number($event.target.value))" />
           <time>{{ formatTime(duration) }}</time>
         </div>
       </div>
 
       <div class="player-actions">
-        <button
-          class="control-button volume-button"
-          type="button"
-          :aria-label="muted ? 'Unmute' : 'Mute'"
-          @click="emit('toggle-mute')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 10v4h4l5 4V6l-5 4H4Zm12.5-2a5.5 5.5 0 0 1 0 8M16 5a9 9 0 0 1 0 14" />
-          </svg>
+        <button class="mode-toggle" type="button" @click="emit('toggle-mode')" :title="mode === 'preview' ? 'Switch to Full Song' : 'Switch to 30s Preview'">
+          <span v-if="mode === 'preview'">🎧 30s</span>
+          <span v-else>🎵 Full</span>
         </button>
 
-        <input
-          class="volume"
-          type="range"
-          min="0"
-          max="100"
-          :value="muted ? 0 : Math.round(volume * 100)"
-          aria-label="Volume"
-          @input="emit('update:volume', Number($event.target.value) / 100)"
-        />
+        <button class="control-button volume-button" type="button" :aria-label="muted ? 'Unmute' : 'Mute'" @click="emit('toggle-mute')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4H4Zm12.5-2a5.5 5.5 0 0 1 0 8M16 5a9 9 0 0 1 0 14"/></svg>
+        </button>
 
-        <button
-          class="control-button close-button"
-          type="button"
-          aria-label="Close player"
-          @click="emit('close')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m6 6 12 12M18 6 6 18" />
-          </svg>
+        <input class="volume" type="range" min="0" max="100" :value="muted ? 0 : Math.round(volume * 100)" aria-label="Volume" @input="emit('update:volume', Number($event.target.value) / 100)" />
+
+        <button class="control-button close-button" type="button" aria-label="Close player" @click="emit('close')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
         </button>
       </div>
     </div>
@@ -125,6 +65,8 @@
 </template>
 
 <script setup>
+import { ref, watch } from 'vue'
+
 const props = defineProps({
   track: { type: Object, default: null },
   isPlaying: { type: Boolean, default: false },
@@ -132,7 +74,8 @@ const props = defineProps({
   duration: { type: Number, default: 30 },
   currentTime: { type: Number, default: 0 },
   volume: { type: Number, default: 0.8 },
-  muted: { type: Boolean, default: false }
+  muted: { type: Boolean, default: false },
+  mode: { type: String, default: 'preview' }
 })
 
 const emit = defineEmits([
@@ -142,8 +85,46 @@ const emit = defineEmits([
   'seek',
   'toggle-mute',
   'close',
-  'update:volume'
+  'update:volume',
+  'toggle-mode'
 ])
+
+// Album art from iTunes
+const albumArt = ref(null)
+
+const gradients = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+]
+
+const artGradient = ref(gradients[0])
+
+function computeGradient(title) {
+  if (!title) return gradients[0]
+  let hash = 0
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return gradients[Math.abs(hash) % gradients.length]
+}
+
+async function fetchArt(track) {
+  if (!track) return
+  artGradient.value = computeGradient(track.title)
+  if (track.album_art_url || track.album_art) return
+  try {
+    const res = await fetch(`/api/songs/album-art?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist || '')}`)
+    const data = await res.json()
+    albumArt.value = data.album_art_url
+  } catch {
+    albumArt.value = null
+  }
+}
+
+watch(() => props.track, (t) => { fetchArt(t) }, { immediate: true })
 
 const formatTime = (seconds) => {
   const value = Number(seconds) || 0
@@ -259,6 +240,33 @@ const formatTime = (seconds) => {
 .track-copy span {
   color: #8e97a6;
   font-size: 11px;
+}
+
+.mode-badge {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(245, 185, 66, 0.15);
+  color: #f5b942;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .05em;
+}
+
+.mode-toggle {
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #8e97a6;
+  font-size: 11px;
+  cursor: pointer;
+  transition: .2s;
+}
+.mode-toggle:hover {
+  border-color: #f5b942;
+  color: #f5b942;
 }
 
 .control-button {
