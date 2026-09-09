@@ -30,10 +30,10 @@ DEFAULT_PLAN = {
 
 # ----- Mood normalization map -----
 MOOD_MAP = {
-    "happy": "happy", "joyful": "happy", "upbeat": "happy", "cheerful": "happy",
-    "fun": "happy", "party": "happy", "dance": "happy", "euphoric": "happy",
-    "bright": "happy", "sunny": "happy", "feel-good": "happy", "feel good": "happy",
-    "summer": "happy", "pop": "happy",
+    "happy": "euphoric", "joyful": "euphoric", "upbeat": "euphoric", "cheerful": "euphoric",
+    "fun": "euphoric", "party": "euphoric", "dance": "euphoric", "euphoric": "euphoric",
+    "bright": "euphoric", "sunny": "euphoric", "feel-good": "euphoric", "feel good": "euphoric",
+    "summer": "euphoric", "pop": "euphoric",
     "sad": "sad", "melancholic": "sad", "melancholy": "sad", "sorrowful": "sad",
     "heartbroken": "sad", "depressing": "sad", "dark": "sad", "gloomy": "sad",
     "somber": "sad", "bittersweet": "sad", "nostalgic": "sad", "emo": "sad",
@@ -51,9 +51,9 @@ MOOD_MAP = {
     "atmospheric": "chill", "dreamy": "chill", "soft": "chill", "gentle": "chill",
     "peaceful": "chill", "serene": "chill", "cozy": "chill", "rainy": "chill",
     "night": "chill", "late night": "chill", "driving": "chill",
-    "romantic": "romantic", "love": "romantic", "intimate": "romantic",
-    "sensual": "romantic", "passionate": "romantic", "tender": "romantic",
-    "sweet": "romantic", "dinner": "romantic", "wedding": "romantic",
+    "romantic": "chill", "love": "chill", "intimate": "chill",
+    "sensual": "chill", "passionate": "chill", "tender": "chill",
+    "sweet": "chill", "dinner": "chill", "wedding": "chill",
 }
 
 
@@ -81,10 +81,10 @@ OVERRIDE_RULES = [
     # Energetic overrides (highest priority for party/workout)
     (["phonk", "drift", "gym", "workout", "metal", "dubstep", "drill", "bass", "boss"], "energetic"),
     (["edm", "festival", "rave", "hype", "banger"], "energetic"),
-    # Happy overrides
-    (["party", "dance", "fun", "upbeat", "summer", "pop", "summer party", "dance pop"], "happy"),
+    # Euphoric overrides
+    (["party", "dance", "fun", "upbeat", "summer", "pop", "summer party", "dance pop"], "euphoric"),
     # Romantic overrides (before chill, so "romantic dinner" stays romantic)
-    (["romantic", "love song", "dinner", "wedding", "date night", "candlelit"], "romantic"),
+    (["romantic", "love song", "dinner", "wedding", "date night", "candlelit"], "chill"),
     # Sad overrides
     (["sad", "heartbreak", "loss", "cry", "tears", "lonely", "breakup"], "sad"),
     # Chill overrides (only if no romantic keywords present)
@@ -167,7 +167,7 @@ Analyze the request and return a JSON object with these fields:
 {{
   "hyde_description": "A detailed 2-3 sentence description of an ideal track matching this vibe. Write it as if describing a real song - include mood, tempo feel, instrumentation, atmosphere. This will be used for semantic similarity search.",
   "expanded_queries": ["query1", "query2", "query3"],
-  "mood": "one of: happy, sad, energetic, chill, romantic, or null if unclear",
+  "mood": "one of: euphoric, sad, energetic, chill, or null if unclear",
   "tempo_range": [min_bpm, max_bpm],
   "energy_range": [min_energy, max_energy],
   "keywords": ["keyword1", "keyword2", "keyword3"],
@@ -175,13 +175,12 @@ Analyze the request and return a JSON object with these fields:
 }}
 
 Rules for mood:
-- MUST be one of exactly: happy, sad, energetic, chill, romantic, or null
+- MUST be one of exactly: euphoric, sad, energetic, chill, or null
 - "phonk", "drift", "gym", "workout", "EDM", "festival", "metal", "bass", "drill" = energetic
 - "lo-fi", "study", "rainy", "night", "ambient", "dreamy" = chill
-- "party", "dance", "fun", "upbeat", "summer", "pop" = happy
-- "love", "romantic", "dinner", "wedding" = romantic
+- "party", "dance", "fun", "upbeat", "summer", "pop" = euphoric
+- "love", "romantic", "dinner", "wedding" = chill
 - "sad", "heartbreak", "loss", "emo", "emotional" = sad
-- Do NOT use synonyms like "melancholic", "aggressive", "euphoric"
 
 Rules for hyde_description:
 - CRITICAL: This MUST match the user's request. Do NOT reuse descriptions from other queries.
@@ -299,9 +298,9 @@ Respond in valid JSON ONLY."""
             # If mood was overridden, fix HyDE if it contradicts the new mood
             hyde_lower = validated_plan.get("hyde_description", "").lower()
             corrected_mood = validated_plan["mood"]
-            if corrected_mood == "happy" and any(w in hyde_lower for w in ["romantic", "tender", "ballad", "candlelit", "intimate"]):
+            if corrected_mood == "euphoric" and any(w in hyde_lower for w in ["romantic", "tender", "ballad", "candlelit", "intimate"]):
                 validated_plan["hyde_description"] = "An upbeat pop anthem with catchy hooks, bright synths, danceable groove for: " + user_prompt
-                print("[QueryPlanner] HyDE corrected for happy mood")
+                print("[QueryPlanner] HyDE corrected for euphoric mood")
             elif corrected_mood == "energetic" and any(w in hyde_lower for w in ["romantic", "tender", "ballad", "soft", "mellow"]):
                 validated_plan["hyde_description"] = "A high-energy track with driving beats, powerful bass, intense atmosphere for: " + user_prompt
                 print("[QueryPlanner] HyDE corrected for energetic mood")

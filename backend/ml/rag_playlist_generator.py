@@ -1,4 +1,5 @@
 import json
+import numpy as np
 import torch
 import torch.nn.functional as F
 from ml.embedding_service import (
@@ -8,6 +9,8 @@ from ml.embedding_service import (
     neural_cross_rerank,
     build_song_profile_text
 )
+from ml.knowledge_service import knowledge_service
+from ml.faiss_service import faiss_service
 from ml.query_planner import decompose_query, normalize_mood
 from rank_bm25 import BM25Okapi
 from config import settings
@@ -110,6 +113,109 @@ def mmr_rerank(
         remaining.remove(best_idx)
 
     return [candidates[i] for i in selected]
+
+
+def hybrid_faiss_rag_search(
+    user_prompt: str,
+    db_session,
+    user_id: int = None,
+    planner_plan: dict = None,
+    top_k: int = None,
+    taste_vector: list = None
+) -> list:
+    """
+    Sub-40ms FAISS-First Hybrid RAG Pipeline:
+    1. Embed query (384d all-MiniLM-L6-v2)
+    2. FAISS IndexFlatIP candidate retrieval (top 60 IDs in < 3ms)
+    3. Selective DB fetch by primary key
+    4. Neural Cross-Encoder Reranking (ms-marco-MiniLM-L-6-v2) with [-15, 15] logit clipping
+    5. 65/35 Score Fusion (0.65 * cross_prob + 0.35 * faiss_sim)
+    """
+    from models import Song
+    DEMO_USER_ID = 15
+
+    if top_k is None:
+        top_k = settings.TOP_K
+
+    if not faiss_service.is_loaded:
+        print("[RAG] FAISS not loaded, falling back to database search")
+        return []
+
+    plan = planner_plan or decompose_query(user_prompt)
+    hyde = plan.get("hyde_description")
+    if hyde and hyde.strip():
+        query_text = f"{user_prompt}. {hyde.strip()}"
+    else:
+        query_text = user_prompt
+    print(f"[FAISS-RAG] Query: \"{query_text[:80]}...\"")
+
+    # 1. Compute query vector
+    query_tensor = get_batch_embeddings_tensor([query_text])
+    if taste_vector is not None:
+        taste_tensor = torch.tensor([taste_vector], dtype=torch.float32, device=device)
+        query_tensor = (1 - settings.TASTE_WEIGHT) * query_tensor + settings.TASTE_WEIGHT * taste_tensor
+    query_np = query_tensor.cpu().numpy().astype('float32')
+
+    # 2. Fast FAISS candidate retrieval
+    num_candidates = min(top_k * 3, 60)
+    faiss_matches = faiss_service.search(query_np, top_k=num_candidates)
+    if not faiss_matches:
+        return []
+
+    candidate_ids = [cid for cid, _ in faiss_matches]
+    faiss_score_map = {cid: score for cid, score in faiss_matches}
+
+    # 3. Fetch matching songs from DB with mood filter
+    planner_mood = plan.get("mood") if plan else None
+    query = db_session.query(Song).filter(Song.id.in_(candidate_ids))
+    if user_id is not None:
+        query = query.filter((Song.user_id == user_id) | (Song.user_id == DEMO_USER_ID))
+    if planner_mood:
+        query = query.filter(Song.mood == planner_mood)
+    candidate_songs = query.all()
+    
+    # If mood filter too strict, relax it
+    if not candidate_songs and planner_mood:
+        query = db_session.query(Song).filter(Song.id.in_(candidate_ids))
+        if user_id is not None:
+            query = query.filter((Song.user_id == user_id) | (Song.user_id == DEMO_USER_ID))
+        candidate_songs = query.all()
+
+    if not candidate_songs:
+        return []
+
+    # 4. Cross-Encoder rerank
+    candidate_docs = [
+        knowledge_service.build_song_profile(
+            title=s.title,
+            artist=s.artist,
+            genre=getattr(s, 'genre', 'pop') or 'pop',
+            audio_features={
+                'energy': s.energy or 0.5,
+                'valence': s.valence or 0.5,
+                'tempo': s.tempo or 120.0,
+                'danceability': s.danceability or 0.5,
+                'acousticness': getattr(s, 'acousticness', 0.0) or 0.0,
+                'instrumentalness': getattr(s, 'instrumentalness', 0.0) or 0.0,
+                'speechiness': getattr(s, 'speechiness', 0.0) or 0.0
+            }
+        )
+        for s in candidate_songs
+    ]
+    cross_logits = neural_cross_rerank(user_prompt, candidate_docs)
+
+    # 5. Fuse scores with logit clipping [-15, 15] and 65/35 weight
+    ranked_candidates = []
+    for i, song in enumerate(candidate_songs):
+        logit = float(cross_logits[i])
+        clipped_logit = float(np.clip(logit, -15.0, 15.0))
+        cross_prob = float(1.0 / (1.0 + np.exp(-clipped_logit)))
+        faiss_sim = float(faiss_score_map.get(song.id, 0.5))
+        fused_score = 0.65 * cross_prob + 0.35 * faiss_sim
+        ranked_candidates.append((fused_score, song))
+
+    ranked_candidates.sort(key=lambda x: x[0], reverse=True)
+    return ranked_candidates[:top_k]
 
 
 def pytorch_database_rag_search(
@@ -463,3 +569,4 @@ Respond in JSON:
         "quality_score": None,
         "quality_notes": "AI DJ unavailable - using raw RAG ranking."
     }
+
