@@ -46,8 +46,15 @@ class Song(Base):
     danceability: Mapped[float] = mapped_column(Float, default=0.0)
     valence: Mapped[float] = mapped_column(Float, default=0.0)
 
+    # Extended audio features
+    genre: Mapped[str | None] = mapped_column(String(100), default="unknown", index=True)
+    acousticness: Mapped[float] = mapped_column(Float, default=0.0)
+    instrumentalness: Mapped[float] = mapped_column(Float, default=0.0)
+    speechiness: Mapped[float] = mapped_column(Float, default=0.0)
+    liveness: Mapped[float] = mapped_column(Float, default=0.0)
+
     # ML & Mood
-    mood: Mapped[str | None] = mapped_column(String(20), index=True)
+    mood: Mapped[str | None] = mapped_column(String(50), index=True)
     mood_confidence: Mapped[float] = mapped_column(Float, default=0.0)
     lyrics_sentiment: Mapped[float] = mapped_column(Float, default=0.0)
 
