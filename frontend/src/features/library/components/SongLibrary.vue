@@ -16,7 +16,7 @@ const total = ref(0)
 const pageSize = 20
 const hasMore = computed(() => songs.value.length < total.value)
 
-const moods = ['All', 'Happy', 'Chill', 'Sad', 'Energetic', 'Romantic']
+const moods = ['All', 'Euphoric', 'Chill', 'Sad', 'Energetic']
 
 // Debounced search
 let searchTimeout = null
@@ -56,7 +56,7 @@ async function fetchSongs(reset = false) {
   }
 }
 
-// Filter by mood — reset and refetch
+// Filter by mood â€” reset and refetch
 watch(filter, () => fetchSongs(true))
 
 // Search is client-side on the loaded songs
@@ -79,8 +79,60 @@ async function deleteSong(id) {
   }
 }
 
-function isCurrentPlaying(song) {
-  return playerState.currentTrack?.id === song.id && playerState.isPlaying
+function isCurrentPlaying(song, type) {
+  return playerState.currentTrack?.id === song.id && playerState.isPlaying && (!type || playerState.mode === type)
+}
+
+// Album art cache - fetches from iTunes on-demand
+const albumArtCache = ref({})
+
+async function fetchAlbumArt(song) {
+  if (albumArtCache.value[song.id] !== undefined) return
+  // Mark as loading
+  albumArtCache.value[song.id] = null
+  try {
+    const res = await client.get('/songs/album-art', {
+      params: { title: song.title, artist: song.artist || '' }
+    })
+    albumArtCache.value[song.id] = res.data?.album_art_url || null
+  } catch {
+    albumArtCache.value[song.id] = null
+  }
+}
+
+// Fetch album art for visible songs
+function fetchVisibleArt() {
+  filteredSongs.value.slice(0, 20).forEach(song => {
+    if (albumArtCache.value[song.id] === undefined) {
+      fetchAlbumArt(song)
+    }
+  })
+}
+
+// Watch for song changes and fetch art
+watch(filteredSongs, () => { fetchVisibleArt() }, { immediate: true })
+
+// Deterministic gradient fallback based on song title
+const gradients = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
+  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+  'linear-gradient(135deg, #f5576c 0%, #ff6a88 100%)',
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+]
+
+function getArtGradient(title) {
+  if (!title) return gradients[0]
+  let hash = 0
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return gradients[Math.abs(hash) % gradients.length]
 }
 
 // Infinite scroll with Intersection Observer
@@ -156,13 +208,16 @@ onUnmounted(() => observer?.disconnect())
         v-for="(song, index) in filteredSongs"
         :key="song.id"
         class="song-row"
-        :class="{ playing: isCurrentPlaying(song) }"
+        :class="{ playing: isCurrentPlaying(song, 'preview') }"
         type="button"
         @click="playTrack(song, 'preview')"
       >
         <span>{{ String(index + 1).padStart(2, '0') }}</span>
         <span class="title">
-          <span class="mini-art">{{ song.title?.charAt(0) || 'M' }}</span>
+          <span class="mini-art">
+            <img v-if="albumArtCache[song.id]" :src="albumArtCache[song.id]" :alt="song.title" loading="lazy">
+            <span v-else :style="{ background: getArtGradient(song.title) }">{{ song.title?.charAt(0) || 'M' }}</span>
+          </span>
           <strong>{{ song.title }}</strong>
         </span>
         <span>{{ song.artist }}</span>
@@ -170,7 +225,8 @@ onUnmounted(() => observer?.disconnect())
         <span>{{ song.play_count || 0 }}</span>
         <span>{{ song.skip_count || 0 }}</span>
         <span class="row-actions">
-          <button type="button" :class="{ liked: song.saved }" @click.stop="playFullTrack(song)" title="Play full">🎬</button>
+          <button type="button" :class="{ active: isCurrentPlaying(song, 'preview') }" @click.stop="playTrack(song, 'preview')" title="Play 30s">{{ isCurrentPlaying(song, 'preview') ? '⏸' : '🎧' }}</button>
+          <button type="button" :class="{ active: isCurrentPlaying(song, 'full') }" @click.stop="playFullTrack(song)" title="Play full">{{ isCurrentPlaying(song, 'full') ? '⏸' : '🎵' }}</button>
           <button type="button" @click.stop="deleteSong(song.id)" title="Remove">×</button>
         </span>
       </button>
@@ -217,12 +273,13 @@ onUnmounted(() => observer?.disconnect())
 .song-row.playing .title strong{color:#f5b942}
 .title{display:flex;align-items:center;gap:10px;min-width:0}
 .title strong{overflow:hidden;color:#f4f5f7;text-overflow:ellipsis;white-space:nowrap}
-.mini-art{width:35px;height:35px;display:grid;place-items:center;flex:none;border-radius:7px;background:linear-gradient(135deg,#3a4350,#bf7a37);color:#fff;font-weight:800;font-size:13px}
+.mini-art{width:35px;height:35px;display:grid;place-items:center;flex:none;border-radius:7px;background:linear-gradient(135deg,#3a4350,#bf7a37);color:#fff;font-weight:800;font-size:13px;overflow:hidden}
+.mini-art img{width:100%;height:100%;object-fit:cover}
 .badge{padding:5px 8px;border-radius:99px;background:rgba(245,185,66,.13);color:#f5b942;font-size:10px;font-weight:600}
 .row-actions{display:flex;justify-content:end;gap:5px;opacity:0}
 .song-row:hover .row-actions{opacity:1}
 .row-actions button{border:0;background:transparent;color:#687180;font-size:18px;cursor:pointer;transition:.15s}
-.row-actions button:hover,.row-actions button.liked{color:#f5b942}
+.row-actions button:hover,.row-actions button.active{color:#f5b942}
 .sentinel{height:1px}
 .loading-more{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px;color:#8e97a6;font-size:13px}
 .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.1);border-top-color:#f5b942;border-radius:50%;animation:spin .6s linear infinite}
@@ -239,3 +296,4 @@ onUnmounted(() => observer?.disconnect())
 .row-skeleton{height:58px;margin-bottom:1px;border-radius:7px}
 @media(max-width:600px){.heading{align-items:start}.count{display:none}.toolbar{flex-direction:column}.pills{margin-bottom:18px}}
 </style>
+

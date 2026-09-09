@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
 
@@ -17,7 +17,7 @@ const timeOfDay = computed(() => {
   return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'
 })
 
-const moodTags = ['Happy', 'Chill', 'Sad', 'Energetic', 'Romantic']
+const moodTags = ['Euphoric', 'Chill', 'Sad', 'Energetic']
 
 async function handleSearch(moodText) {
   const prompt = moodText || mood.value
@@ -35,6 +35,16 @@ async function handleSearch(moodText) {
   }
 }
 
+// Fetch album art when playlist changes
+watch(playlist, (val) => {
+  if (val?.items) {
+    val.items.forEach(item => fetchAlbumArt(item.song))
+  }
+  if (val?.new_recommendations) {
+    val.new_recommendations.forEach(rec => fetchAlbumArt(rec))
+  }
+}, { deep: true })
+
 async function addToLibrary(rec) {
   addingTrack.value[rec.title] = true
   try {
@@ -48,6 +58,50 @@ async function addToLibrary(rec) {
 
 function isCurrentPlaying(track, mode) {
   return playerState.currentTrack?.title === track.title && playerState.mode === mode && playerState.isPlaying
+}
+
+// Album art cache
+const albumArtCache = ref({})
+
+async function fetchAlbumArt(song) {
+  const key = `${song.title}-${song.artist}`
+  if (albumArtCache.value[key] !== undefined) return
+  albumArtCache.value[key] = null
+  try {
+    const res = await client.get('/songs/album-art', {
+      params: { title: song.title, artist: song.artist || '' }
+    })
+    albumArtCache.value[key] = res.data?.album_art_url || null
+  } catch {
+    albumArtCache.value[key] = null
+  }
+}
+
+function getAlbumArt(song) {
+  const key = `${song.title}-${song.artist}`
+  return albumArtCache.value[key]
+}
+
+const gradients = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
+  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+  'linear-gradient(135deg, #f5576c 0%, #ff6a88 100%)',
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+]
+
+function getArtGradient(title) {
+  if (!title) return gradients[0]
+  let hash = 0
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return gradients[Math.abs(hash) % gradients.length]
 }
 </script>
 
@@ -63,7 +117,7 @@ function isCurrentPlaying(track, mode) {
     </header>
 
     <form class="mood-search" @submit.prevent="handleSearch()">
-      <span class="sparkle">✦</span>
+      <span class="sparkle">✨</span>
       <textarea v-model="mood" rows="2" placeholder="Describe your mood..." aria-label="Describe your mood"></textarea>
       <button type="submit" :disabled="isGenerating || !mood.trim()">
         <span v-if="isGenerating">Curating...</span>
@@ -109,7 +163,7 @@ function isCurrentPlaying(track, mode) {
     </div>
 
     <div v-else-if="!playlist" class="empty">
-      <div class="empty-icon">♪</div>
+      <div class="empty-icon">♫</div>
       <h2>Describe your mood to discover music</h2>
       <p>Start with a feeling, a memory, or a moment.</p>
     </div>
@@ -118,8 +172,8 @@ function isCurrentPlaying(track, mode) {
       <div v-if="playlist.items?.length" class="grid">
         <article v-for="item in playlist.items" :key="item.id" class="song-card">
           <div class="cover">
-            <img v-if="item.song.album_art_url" :src="item.song.album_art_url" :alt="`${item.song.title} artwork`">
-            <span v-else>{{ item.song.title?.charAt(0) || 'M' }}</span>
+            <img v-if="item.song.album_art_url || getAlbumArt(item.song)" :src="item.song.album_art_url || getAlbumArt(item.song)" :alt="`${item.song.title} artwork`" loading="lazy">
+            <span v-else :style="{ background: getArtGradient(item.song.title) }">{{ item.song.title?.charAt(0) || 'M' }}</span>
             <button class="play" type="button" aria-label="Play song" @click="playTrack(item.song, 'preview')">▶</button>
           </div>
           <div class="song-meta">
@@ -131,7 +185,7 @@ function isCurrentPlaying(track, mode) {
           <span class="mood-badge">{{ item.song.mood || 'Chill' }}</span>
           <div class="feedback">
             <button type="button" :class="{ active: isCurrentPlaying(item.song, 'preview') }" @click="playTrack(item.song, 'preview')">{{ isCurrentPlaying(item.song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
-            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'full') }" @click="playFullTrack(item.song)">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'full') }" @click="playFullTrack(item.song)">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
           </div>
         </article>
       </div>
@@ -146,8 +200,8 @@ function isCurrentPlaying(track, mode) {
       <div v-if="playlist.new_recommendations?.length" class="grid">
         <article v-for="rec in playlist.new_recommendations" :key="rec.title" class="song-card">
           <div class="cover">
-            <img v-if="rec.album_art_url" :src="rec.album_art_url" :alt="`${rec.title} artwork`">
-            <span v-else>{{ rec.title?.charAt(0) || 'M' }}</span>
+            <img v-if="rec.album_art_url || getAlbumArt(rec)" :src="rec.album_art_url || getAlbumArt(rec)" :alt="`${rec.title} artwork`" loading="lazy">
+            <span v-else :style="{ background: getArtGradient(rec.title) }">{{ rec.title?.charAt(0) || 'M' }}</span>
             <button class="play" type="button" aria-label="Play song" @click="playTrack(rec, 'preview')">▶</button>
           </div>
           <div class="song-meta">
@@ -159,7 +213,7 @@ function isCurrentPlaying(track, mode) {
           <span class="mood-badge">{{ rec.mood || 'Chill' }}</span>
           <div class="feedback">
             <button type="button" :class="{ active: isCurrentPlaying(rec, 'preview') }" @click="playTrack(rec, 'preview')">{{ isCurrentPlaying(rec, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
-            <button type="button" :class="{ active: isCurrentPlaying(rec, 'full') }" @click="playFullTrack(rec)">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎬 Full' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(rec, 'full') }" @click="playFullTrack(rec)">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
             <button class="import-btn" type="button" :disabled="addingTrack[rec.title] === true || addingTrack[rec.title] === 'done'" @click="addToLibrary(rec)">{{ addingTrack[rec.title] === 'done' ? '✓ Saved' : addingTrack[rec.title] ? '...' : '+ Save' }}</button>
           </div>
         </article>
@@ -232,3 +286,4 @@ h2{margin:0;font-size:20px;letter-spacing:-.03em}
 @media(max-width:800px){.profile-card{flex-direction:column}.bars{width:100%}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.hero{align-items:start}.pulse{display:none}.mood-search{align-items:stretch;flex-wrap:wrap}.mood-search textarea{flex-basis:calc(100% - 38px)}.mood-search button{width:100%}.grid{grid-template-columns:1fr}}
 </style>
+
