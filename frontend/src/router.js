@@ -6,7 +6,8 @@ const routes = [
     component: () => import('./layouts/DefaultLayout.vue'),
     meta: { requiresAuth: true },
     children: [
-      { path: '', redirect: '/discover' },
+      { path: '', redirect: '/home' },
+      { path: 'home', name: 'Home', component: () => import('./features/home/views/HomeView.vue') },
       { path: 'discover', name: 'Discover', component: () => import('./features/discover/views/DiscoverView.vue') },
       { path: 'library', name: 'Library', component: () => import('./features/library/views/LibraryView.vue') },
       { path: 'import', name: 'Import', component: () => import('./features/import/views/ImportView.vue') },

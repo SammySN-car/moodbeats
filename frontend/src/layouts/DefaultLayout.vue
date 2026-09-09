@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { useRouter, useRoute } from 'vue-router'
 import { computed, ref } from 'vue'
 import { usePlayer } from '../shared/composables/usePlayer'
@@ -6,7 +6,7 @@ import BottomPlayer from '../features/player/components/BottomPlayer.vue'
 
 const router = useRouter()
 const route = useRoute()
-const { playerState, togglePlay, skipTrack, seek, toggleMute, closePlayer } = usePlayer()
+const { playerState, togglePlay, toggleMode, skipTrack, seek, toggleMute, closePlayer } = usePlayer()
 
 const userName = computed(() => localStorage.getItem('userName') || 'Listener')
 const userInitials = computed(() => {
@@ -20,6 +20,11 @@ const navigation = [
   {
     label: 'Listen',
     items: [
+      {
+        label: 'Home',
+        route: '/home',
+        icon: '<svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'
+      },
       {
         label: 'Discover',
         route: '/discover',
@@ -78,7 +83,7 @@ const handleSeek = (val) => {
   <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <aside class="sidebar" aria-label="Primary navigation">
       <div class="brand-row">
-        <router-link class="brand" to="/discover" aria-label="MoodBeats home">
+        <router-link class="brand" to="/home" aria-label="MoodBeats home">
           <span class="brand-mark" aria-hidden="true">
             <span></span><span></span><span></span>
           </span>
@@ -179,13 +184,25 @@ const handleSeek = (val) => {
       :current-time="playerState.currentTime"
       :volume="playerState.volume"
       :muted="playerState.isMuted"
+      :mode="playerState.mode"
       @toggle-play="togglePlay"
       @next="skipTrack"
       @previous="skipTrack"
       @seek="(val) => {}"
       @toggle-mute="toggleMute"
       @close="closePlayer"
+      @toggle-mode="toggleMode"
     />
+
+    <!-- Hidden YouTube player for full song mode -->
+    <div v-if="playerState.youtubeVideoId" class="yt-container">
+      <iframe
+        :src="`https://www.youtube.com/embed/${playerState.youtubeVideoId}?autoplay=1&enablejsapi=1`"
+        allow="autoplay; encrypted-media"
+        allowfullscreen
+        class="yt-iframe"
+      ></iframe>
+    </div>
   </div>
 </template>
 
@@ -510,5 +527,22 @@ const handleSeek = (val) => {
     min-height: calc(100vh - 66px);
     padding: 25px 17px 150px;
   }
+}
+.yt-container {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  width: 320px;
+  height: 180px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  z-index: 50;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.yt-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 </style>
