@@ -28,16 +28,22 @@ let lastEventSongId = null
  * Send a listening event to the backend.
  * Fires and forgets -- we don't block the UI on analytics.
  */
-async function sendListeningEvent(songId, eventType, durationListened = 0) {
-  if (!songId) return
+async function sendListeningEvent(songId, eventType, durationListened = 0, spotifyId) {
+  let id = songId
+  if (!id && spotifyId) {
+    try {
+      const res = await client.get('/songs/by-spotify-id', { params: { spotify_id: spotifyId } })
+      id = res.data?.id
+    } catch {}
+  }
+  if (!id) return
   try {
     await client.post('/listening/event', {
-      song_id: songId,
+      song_id: id,
       event_type: eventType,
       duration_listened: durationListened
     })
   } catch (err) {
-    // Silently fail -- analytics should never break playback
     console.warn('[Feedback] Event failed:', err.message)
   }
 }
@@ -77,7 +83,7 @@ export function usePlayer() {
       // Send play event for the completed track
       if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
         const duration = getEffectiveDuration()
-        sendListeningEvent(playerState.currentTrack.id, 'play', duration)
+        sendListeningEvent(playerState.currentTrack.id, 'play', duration, playerState.currentTrack?.spotify_id)
         lastEventSongId = playerState.currentTrack.id
       }
       playStartedAt = null
@@ -109,7 +115,7 @@ export function usePlayer() {
     if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
       const duration = getEffectiveDuration()
       if (duration > 1) {
-        sendListeningEvent(playerState.currentTrack.id, 'skip', duration)
+        sendListeningEvent(playerState.currentTrack.id, 'skip', duration, playerState.currentTrack?.spotify_id)
       }
     }
 
@@ -150,7 +156,7 @@ export function usePlayer() {
         audio.play().catch(e => console.warn('Preview playback error:', e))
         playerState.isPlaying = true
         playStartedAt = Date.now()
-        sendListeningEvent(track.id, 'play', 0)
+        sendListeningEvent(track.id, 'play', 0, track.spotify_id)
         lastEventSongId = track.id
       } else {
         // Fallback to full YouTube mode if no preview available
@@ -171,7 +177,7 @@ export function usePlayer() {
 
     // Send play event for full mode too
     playStartedAt = Date.now()
-    sendListeningEvent(track.id, 'play', 0)
+    sendListeningEvent(track.id, 'play', 0, track.spotify_id)
     lastEventSongId = track.id
 
     try {
@@ -198,7 +204,7 @@ export function usePlayer() {
     if (!playerState.currentTrack) return
     const duration = getEffectiveDuration()
     if (duration > 1 && playerState.currentTrack.id) {
-      sendListeningEvent(playerState.currentTrack.id, 'skip', duration)
+      sendListeningEvent(playerState.currentTrack.id, 'skip', duration, playerState.currentTrack?.spotify_id)
     }
     lastEventSongId = null
     playStartedAt = null
@@ -249,7 +255,7 @@ export function usePlayer() {
     if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
       const duration = getEffectiveDuration()
       if (duration > 1) {
-        sendListeningEvent(playerState.currentTrack.id, 'skip', duration)
+        sendListeningEvent(playerState.currentTrack.id, 'skip', duration, playerState.currentTrack?.spotify_id)
       }
     }
     lastEventSongId = null

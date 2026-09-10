@@ -25,6 +25,14 @@ def get_youtube_id(title: str, artist: Optional[str] = ""):
     return {"video_id": vid}
 
 
+@router.get("/by-spotify-id")
+def get_song_by_spotify_id(spotify_id: str, db: Session = Depends(get_db)):
+    song = db.query(Song).filter(Song.spotify_id == spotify_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    return {"id": song.id}
+
+
 @router.get("/search", response_model=List[SpotifySearchResult])
 def search_tracks(
     q: str,
