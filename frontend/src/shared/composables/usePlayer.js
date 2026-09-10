@@ -29,6 +29,7 @@ let lastEventSongId = null
  * Fires and forgets -- we don't block the UI on analytics.
  */
 async function sendListeningEvent(songId, eventType, durationListened = 0) {
+  if (!songId) return
   try {
     await client.post('/listening/event', {
       song_id: songId,
