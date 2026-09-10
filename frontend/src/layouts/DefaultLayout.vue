@@ -594,4 +594,10 @@ const handleSeek = (val) => {
   height: 100%;
   border: 0;
 }
+.yt-iframe iframe,
+.yt-iframe > iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: 0;
+}
 </style>
