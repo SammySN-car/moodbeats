@@ -1,12 +1,12 @@
 <script setup>
 import { useRouter, useRoute } from 'vue-router'
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onUnmounted, nextTick } from 'vue'
 import { usePlayer } from '../shared/composables/usePlayer'
 import BottomPlayer from '../features/player/components/BottomPlayer.vue'
 
 const router = useRouter()
 const route = useRoute()
-const { playerState, togglePlay, toggleMode, skipTrack, seek, toggleMute, closePlayer } = usePlayer()
+const { playerState, togglePlay, toggleMode, skipTrack, seek, toggleMute, closePlayer, nextInQueue, sendListeningEvent } = usePlayer()
 
 const userName = computed(() => localStorage.getItem('userName') || 'Listener')
 const userInitials = computed(() => {
@@ -55,6 +55,60 @@ const navigation = [
 ]
 
 const isActive = (path) => route.path === path
+
+// YouTube IFrame API
+const ytPlayer = ref(null)
+let ytPlayerInstance = null
+
+function loadYtApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve()
+  return new Promise((resolve) => {
+    window.onYouTubeIframeAPIReady = resolve
+    const tag = document.createElement('script')
+    tag.src = 'https://www.youtube.com/iframe_api'
+    document.head.appendChild(tag)
+  })
+}
+
+function initYtPlayer(videoId) {
+  if (!videoId || !ytPlayer.value) return
+  if (ytPlayerInstance) {
+    try { ytPlayerInstance.destroy() } catch {}
+  }
+  ytPlayerInstance = new window.YT.Player(ytPlayer.value, {
+    videoId,
+    playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0 },
+    events: {
+      onStateChange(e) {
+        if (e.data === 0) {
+          if (playerState.currentTrack?.id) {
+            sendListeningEvent(playerState.currentTrack.id, 'play', 0)
+          }
+          playerState.isPlaying = false
+          playerState.currentTime = 0
+          playerState.progress = 0
+          if (playerState.queue.length > 0) {
+            nextInQueue()
+          }
+        }
+      }
+    }
+  })
+}
+
+watch(() => playerState.youtubeVideoId, async (newId) => {
+  if (newId) {
+    await loadYtApi()
+    await nextTick()
+    initYtPlayer(newId)
+  }
+})
+
+onUnmounted(() => {
+  if (ytPlayerInstance) {
+    try { ytPlayerInstance.destroy() } catch {}
+  }
+})
 
 const pageTitle = computed(() => {
   return navigation
@@ -196,12 +250,7 @@ const handleSeek = (val) => {
 
     <!-- Hidden YouTube player for full song mode -->
     <div v-if="playerState.youtubeVideoId" class="yt-container">
-      <iframe
-        :src="`https://www.youtube.com/embed/${playerState.youtubeVideoId}?autoplay=1&enablejsapi=1`"
-        allow="autoplay; encrypted-media"
-        allowfullscreen
-        class="yt-iframe"
-      ></iframe>
+      <div ref="ytPlayer" class="yt-iframe"></div>
     </div>
   </div>
 </template>
