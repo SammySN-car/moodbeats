@@ -77,6 +77,8 @@ function initYtPlayer(videoId) {
   }
   ytPlayerInstance = new window.YT.Player(ytPlayer.value, {
     videoId,
+    width: 320,
+    height: 180,
     playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0 },
     events: {
       onStateChange(e) {
