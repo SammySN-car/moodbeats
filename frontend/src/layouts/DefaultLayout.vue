@@ -83,9 +83,7 @@ function initYtPlayer(videoId) {
     playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, origin: window.location.origin },
     events: {
       onStateChange(e) {
-        console.log('[YT] state changed:', e.data, 'queue:', playerState.queue.length)
         if (e.data === 0) {
-          console.log('[YT] video ended, advancing queue')
           if (playerState.currentTrack?.id) {
             sendListeningEvent(playerState.currentTrack.id, 'play', 0)
           }

@@ -73,7 +73,6 @@ export function usePlayer() {
   if (!audio._autoPlayRegistered) {
     audio._autoPlayRegistered = true
     audio.addEventListener('ended', () => {
-      console.log('[AUTO-PLAY] ended fired. queue:', playerState.queue.length, 'queueIndex:', playerState.queueIndex, 'track:', playerState.currentTrack?.title)
       // Send play event for the completed track
       if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
         const duration = getEffectiveDuration()
@@ -86,11 +85,8 @@ export function usePlayer() {
       playerState.progress = 0
 
       // Advance to next in queue
-      console.log('[AUTO-PLAY] queue.length:', playerState.queue.length, 'queueIndex:', playerState.queueIndex)
       if (playerState.queue.length > 0) {
         nextInQueue()
-      } else {
-        console.log('[AUTO-PLAY] queue is EMPTY - nothing to play next')
       }
     })
   }
@@ -119,7 +115,8 @@ export function usePlayer() {
     // Reset tracking for the new track
     lastEventSongId = null
     playStartedAt = null
-    console.log('[PLAY-TRACK]', track.title, 'mode:', mode, 'queue:', playerState.queue.length, 'queueIndex:', playerState.queueIndex)
+
+
 
     playerState.currentTrack = track
     // Update queue index if track is in queue (only if track has a real id)
@@ -130,7 +127,7 @@ export function usePlayer() {
     playerState.mode = mode
     playerState.currentTime = 0
     playerState.progress = 0
-    console.log('[PLAY] mode:', mode, 'track:', track.title)
+
 
     if (mode === 'preview') {
       let previewUrl = track.preview_url
@@ -181,10 +178,10 @@ export function usePlayer() {
         params: { title: track.title, artist: track.artist || '' }
       })
       if (res.data?.video_id) {
-        console.log('[FULL] setting youtubeVideoId:', res.data.video_id, 'for:', track.title)
+
         playerState.youtubeVideoId = res.data.video_id
       } else {
-        console.log('[FULL] no video_id returned for:', track.title)
+
       }
     } catch (err) {
       console.warn('Could not fetch YouTube ID:', err)
@@ -263,27 +260,22 @@ export function usePlayer() {
   }
 
   function setQueue(tracks, startIndex = 0) {
-    console.log('[SET-QUEUE] tracks:', tracks.length, 'startIndex:', startIndex, 'first track:', tracks[0]?.title)
+
     playerState.queue = tracks
     playerState.queueIndex = startIndex
   }
 
   function nextInQueue() {
-    if (playerState.queue.length === 0) { console.log('[NEXT] queue empty'); return }
+    if (playerState.queue.length === 0) return
     const nextIdx = playerState.queueIndex + 1
-    console.log('[NEXT] queueIndex:', playerState.queueIndex, '-> nextIdx:', nextIdx, 'queueLen:', playerState.queue.length, 'nextTrack:', playerState.queue[nextIdx]?.title)
     if (nextIdx < playerState.queue.length) {
       playerState.queueIndex = nextIdx
       const nextTrack = playerState.queue[nextIdx]
       const nextMode = playerState.mode
       // Use setTimeout to break out of YouTube callback context
       setTimeout(() => {
-        playTrack(nextTrack, nextMode).catch(err => {
-          console.error('[NEXT] playTrack failed:', err)
-        })
+        playTrack(nextTrack, nextMode)
       }, 0)
-    } else {
-      console.log('[NEXT] at end of queue')
     }
   }
 
@@ -295,9 +287,7 @@ export function usePlayer() {
       const prevTrack = playerState.queue[prevIdx]
       const prevMode = playerState.mode
       setTimeout(() => {
-        playTrack(prevTrack, prevMode).catch(err => {
-          console.error('[PREV] playTrack failed:', err)
-        })
+        playTrack(prevTrack, prevMode)
       }, 0)
     }
   }
