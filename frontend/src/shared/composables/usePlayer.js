@@ -122,9 +122,11 @@ export function usePlayer() {
     console.log('[PLAY-TRACK]', track.title, 'mode:', mode, 'queue:', playerState.queue.length, 'queueIndex:', playerState.queueIndex)
 
     playerState.currentTrack = track
-    // Update queue index if track is in queue
-    const qIdx = playerState.queue.findIndex(t => t.id === track.id)
-    if (qIdx !== -1) playerState.queueIndex = qIdx
+    // Update queue index if track is in queue (only if track has a real id)
+    if (track.id) {
+      const qIdx = playerState.queue.findIndex(t => t.id === track.id)
+      if (qIdx !== -1) playerState.queueIndex = qIdx
+    }
     playerState.mode = mode
     playerState.currentTime = 0
     playerState.progress = 0
