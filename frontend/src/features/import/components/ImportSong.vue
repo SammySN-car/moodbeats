@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
 
-const { playTrack, playFullTrack, playerState } = usePlayer()
+const { playTrack, playFullTrack, playerState, setQueue } = usePlayer()
 const searchMode = ref('artist')
 const searchQuery = ref('')
 const searchResults = ref([])
@@ -28,6 +28,16 @@ async function loadLibrary() {
 
 function isInLibrary(title, artist) {
   return libraryTitles.value.includes((title + '|' + artist).toLowerCase())
+}
+
+function playArtistTrack(t) {
+  setQueue(artistTracks.value, artistTracks.value.findIndex(x => x.spotify_id === t.spotify_id))
+  playTrack(t, 'preview')
+}
+
+function playSearchTrack(t) {
+  setQueue(searchResults.value, searchResults.value.findIndex(x => x.spotify_id === t.spotify_id))
+  playTrack(t, 'preview')
 }
 
 onMounted(loadLibrary)
@@ -155,7 +165,7 @@ function isCurrentPlaying(t, m) {
             <span v-if="isInLibrary(t.title, t.artist)" class="in-library">In Library</span>
           </div>
           <div class="card-actions">
-            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playArtistTrack(t)">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
             <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
             <button class="import" type="button" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
           </div>
@@ -188,7 +198,7 @@ function isCurrentPlaying(t, m) {
             <span v-if="isInLibrary(t.title, t.artist)" class="in-library">In Library</span>
           </div>
           <div class="card-actions">
-            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playTrack(t, 'preview')">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playSearchTrack(t)">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
             <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
             <button class="import" type="button" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
           </div>
