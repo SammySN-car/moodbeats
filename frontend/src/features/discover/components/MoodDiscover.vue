@@ -60,14 +60,14 @@ function isCurrentPlaying(track, mode) {
   return playerState.currentTrack?.title === track.title && playerState.mode === mode && playerState.isPlaying
 }
 
-function playItem(item) {
+function playItem(item, mode = 'preview') {
   setQueue(playlist.value.items.map(i => i.song), playlist.value.items.findIndex(i => i.song.id === item.song.id))
-  playTrack(item.song, 'preview')
+  playTrack(item.song, mode)
 }
 
-function playRec(rec) {
+function playRec(rec, mode = 'preview') {
   setQueue(playlist.value.new_recommendations, playlist.value.new_recommendations.findIndex(r => r.id === rec.id))
-  playTrack(rec, 'preview')
+  playTrack(rec, mode)
 }
 
 // Album art cache
@@ -195,7 +195,7 @@ function getArtGradient(title) {
           <span class="mood-badge">{{ item.song.mood || 'Chill' }}</span>
           <div class="feedback">
             <button type="button" :class="{ active: isCurrentPlaying(item.song, 'preview') }" @click="playItem(item)">{{ isCurrentPlaying(item.song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
-            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'full') }" @click="playFullTrack(item.song)">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'full') }" @click="playItem(item, 'full')">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
           </div>
         </article>
       </div>
@@ -223,7 +223,7 @@ function getArtGradient(title) {
           <span class="mood-badge">{{ rec.mood || 'Chill' }}</span>
           <div class="feedback">
             <button type="button" :class="{ active: isCurrentPlaying(rec, 'preview') }" @click="playRec(rec)">{{ isCurrentPlaying(rec, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
-            <button type="button" :class="{ active: isCurrentPlaying(rec, 'full') }" @click="playFullTrack(rec)">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(rec, 'full') }" @click="playRec(rec, 'full')">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
             <button class="import-btn" type="button" :disabled="addingTrack[rec.title] === true || addingTrack[rec.title] === 'done'" @click="addToLibrary(rec)">{{ addingTrack[rec.title] === 'done' ? '✓ Saved' : addingTrack[rec.title] ? '...' : '+ Save' }}</button>
           </div>
         </article>

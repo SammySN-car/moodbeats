@@ -30,14 +30,14 @@ function isInLibrary(title, artist) {
   return libraryTitles.value.includes((title + '|' + artist).toLowerCase())
 }
 
-function playArtistTrack(t) {
+function playArtistTrack(t, mode = 'preview') {
   setQueue(artistTracks.value, artistTracks.value.findIndex(x => x.spotify_id === t.spotify_id))
-  playTrack(t, 'preview')
+  playTrack(t, mode)
 }
 
-function playSearchTrack(t) {
+function playSearchTrack(t, mode = 'preview') {
   setQueue(searchResults.value, searchResults.value.findIndex(x => x.spotify_id === t.spotify_id))
-  playTrack(t, 'preview')
+  playTrack(t, mode)
 }
 
 onMounted(loadLibrary)
@@ -166,7 +166,7 @@ function isCurrentPlaying(t, m) {
           </div>
           <div class="card-actions">
             <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playArtistTrack(t)">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
-            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playArtistTrack(t, 'full')">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
             <button class="import" type="button" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
           </div>
         </article>
@@ -199,7 +199,7 @@ function isCurrentPlaying(t, m) {
           </div>
           <div class="card-actions">
             <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'preview') }" @click="playSearchTrack(t)">{{ isCurrentPlaying(t, 'preview') ? '⏸' : '🎧' }}</button>
-            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playFullTrack(t)">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
+            <button class="play-btn" type="button" :class="{ active: isCurrentPlaying(t, 'full') }" @click="playSearchTrack(t, 'full')">{{ isCurrentPlaying(t, 'full') ? '⏸' : '🎬' }}</button>
             <button class="import" type="button" :disabled="importingTracks[t.title] === true || importingTracks[t.title] === 'done'" @click="importiTunes(t)">{{ importingTracks[t.title] === 'done' ? '✓ Added' : importingTracks[t.title] ? '...' : '+ Add' }}</button>
           </div>
         </article>

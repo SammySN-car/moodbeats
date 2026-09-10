@@ -83,9 +83,9 @@ function isCurrentPlaying(song, type) {
   return playerState.currentTrack?.id === song.id && playerState.isPlaying && (!type || playerState.mode === type)
 }
 
-function playSong(song) {
+function playSong(song, mode = 'preview') {
   setQueue(filteredSongs.value, filteredSongs.value.findIndex(s => s.id === song.id))
-  playTrack(song, 'preview')
+  playTrack(song, mode)
 }
 
 // Album art cache - fetches from iTunes on-demand
@@ -231,7 +231,7 @@ onUnmounted(() => observer?.disconnect())
         <span>{{ song.skip_count || 0 }}</span>
         <span class="row-actions">
           <button type="button" :class="{ active: isCurrentPlaying(song, 'preview') }" @click.stop="playSong(song)" title="Play 30s">{{ isCurrentPlaying(song, 'preview') ? '⏸' : '🎧' }}</button>
-          <button type="button" :class="{ active: isCurrentPlaying(song, 'full') }" @click.stop="playFullTrack(song)" title="Play full">{{ isCurrentPlaying(song, 'full') ? '⏸' : '🎵' }}</button>
+          <button type="button" :class="{ active: isCurrentPlaying(song, 'full') }" @click.stop="playSong(song, 'full')" title="Play full">{{ isCurrentPlaying(song, 'full') ? '⏸' : '🎵' }}</button>
           <button type="button" @click.stop="deleteSong(song.id)" title="Remove">×</button>
         </span>
       </button>
