@@ -272,7 +272,14 @@ export function usePlayer() {
     console.log('[NEXT] queueIndex:', playerState.queueIndex, '-> nextIdx:', nextIdx, 'queueLen:', playerState.queue.length, 'nextTrack:', playerState.queue[nextIdx]?.title)
     if (nextIdx < playerState.queue.length) {
       playerState.queueIndex = nextIdx
-      playTrack(playerState.queue[nextIdx], playerState.mode)
+      const nextTrack = playerState.queue[nextIdx]
+      const nextMode = playerState.mode
+      // Use setTimeout to break out of YouTube callback context
+      setTimeout(() => {
+        playTrack(nextTrack, nextMode).catch(err => {
+          console.error('[NEXT] playTrack failed:', err)
+        })
+      }, 0)
     } else {
       console.log('[NEXT] at end of queue')
     }
@@ -283,7 +290,13 @@ export function usePlayer() {
     const prevIdx = playerState.queueIndex - 1
     if (prevIdx >= 0) {
       playerState.queueIndex = prevIdx
-      playTrack(playerState.queue[prevIdx], playerState.mode)
+      const prevTrack = playerState.queue[prevIdx]
+      const prevMode = playerState.mode
+      setTimeout(() => {
+        playTrack(prevTrack, prevMode).catch(err => {
+          console.error('[PREV] playTrack failed:', err)
+        })
+      }, 0)
     }
   }
 
