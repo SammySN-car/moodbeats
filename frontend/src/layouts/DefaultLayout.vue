@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { useRouter, useRoute } from 'vue-router'
 import { computed, ref, watch, onUnmounted, nextTick } from 'vue'
 import { usePlayer } from '../shared/composables/usePlayer'
@@ -80,10 +80,12 @@ function initYtPlayer(videoId) {
     videoId,
     width: 320,
     height: 180,
-    playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0 },
+    playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, origin: window.location.origin },
     events: {
       onStateChange(e) {
+        console.log('[YT] state changed:', e.data, 'queue:', playerState.queue.length)
         if (e.data === 0) {
+          console.log('[YT] video ended, advancing queue')
           if (playerState.currentTrack?.id) {
             sendListeningEvent(playerState.currentTrack.id, 'play', 0)
           }
@@ -613,3 +615,4 @@ const handleSeek = (val) => {
   border: 0;
 }
 </style>
+
