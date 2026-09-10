@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
 
-const { playTrack, playFullTrack, playerState } = usePlayer()
+const { playTrack, playFullTrack, playerState, setQueue } = usePlayer()
 const mood = ref('')
 const isGenerating = ref(false)
 const playlist = ref(null)
@@ -58,6 +58,16 @@ async function addToLibrary(rec) {
 
 function isCurrentPlaying(track, mode) {
   return playerState.currentTrack?.title === track.title && playerState.mode === mode && playerState.isPlaying
+}
+
+function playItem(item) {
+  setQueue(playlist.value.items.map(i => i.song), playlist.value.items.findIndex(i => i.song.id === item.song.id))
+  playTrack(item.song, 'preview')
+}
+
+function playRec(rec) {
+  setQueue(playlist.value.new_recommendations, playlist.value.new_recommendations.findIndex(r => r.id === rec.id))
+  playTrack(rec, 'preview')
 }
 
 // Album art cache
@@ -174,7 +184,7 @@ function getArtGradient(title) {
           <div class="cover">
             <img v-if="item.song.album_art_url || getAlbumArt(item.song)" :src="item.song.album_art_url || getAlbumArt(item.song)" :alt="`${item.song.title} artwork`" loading="lazy">
             <span v-else :style="{ background: getArtGradient(item.song.title) }">{{ item.song.title?.charAt(0) || 'M' }}</span>
-            <button class="play" type="button" aria-label="Play song" @click="playTrack(item.song, 'preview')">▶</button>
+            <button class="play" type="button" aria-label="Play song" @click="playItem(item)">▶</button>
           </div>
           <div class="song-meta">
             <div>
@@ -184,7 +194,7 @@ function getArtGradient(title) {
           </div>
           <span class="mood-badge">{{ item.song.mood || 'Chill' }}</span>
           <div class="feedback">
-            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'preview') }" @click="playTrack(item.song, 'preview')">{{ isCurrentPlaying(item.song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(item.song, 'preview') }" @click="playItem(item)">{{ isCurrentPlaying(item.song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
             <button type="button" :class="{ active: isCurrentPlaying(item.song, 'full') }" @click="playFullTrack(item.song)">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
           </div>
         </article>
@@ -202,7 +212,7 @@ function getArtGradient(title) {
           <div class="cover">
             <img v-if="rec.album_art_url || getAlbumArt(rec)" :src="rec.album_art_url || getAlbumArt(rec)" :alt="`${rec.title} artwork`" loading="lazy">
             <span v-else :style="{ background: getArtGradient(rec.title) }">{{ rec.title?.charAt(0) || 'M' }}</span>
-            <button class="play" type="button" aria-label="Play song" @click="playTrack(rec, 'preview')">▶</button>
+            <button class="play" type="button" aria-label="Play song" @click="playRec(rec)">▶</button>
           </div>
           <div class="song-meta">
             <div>
@@ -212,7 +222,7 @@ function getArtGradient(title) {
           </div>
           <span class="mood-badge">{{ rec.mood || 'Chill' }}</span>
           <div class="feedback">
-            <button type="button" :class="{ active: isCurrentPlaying(rec, 'preview') }" @click="playTrack(rec, 'preview')">{{ isCurrentPlaying(rec, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
+            <button type="button" :class="{ active: isCurrentPlaying(rec, 'preview') }" @click="playRec(rec)">{{ isCurrentPlaying(rec, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
             <button type="button" :class="{ active: isCurrentPlaying(rec, 'full') }" @click="playFullTrack(rec)">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
             <button class="import-btn" type="button" :disabled="addingTrack[rec.title] === true || addingTrack[rec.title] === 'done'" @click="addToLibrary(rec)">{{ addingTrack[rec.title] === 'done' ? '✓ Saved' : addingTrack[rec.title] ? '...' : '+ Save' }}</button>
           </div>

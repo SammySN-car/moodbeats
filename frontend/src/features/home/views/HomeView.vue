@@ -5,7 +5,7 @@ import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
 
 const router = useRouter()
-const { playTrack, playFullTrack, playerState } = usePlayer()
+const { playTrack, playFullTrack, playerState, setQueue } = usePlayer()
 
 const recentlyPlayed = ref([])
 const topMoods = ref([])
@@ -164,10 +164,10 @@ onMounted(loadHome)
       </div>
       <div class="scroll-row">
         <article
-          v-for="song in recentlyPlayed"
+          v-for="(song, idx) in recentlyPlayed"
           :key="song.id"
           class="recent-card"
-          @click="playTrack(song, 'preview')"
+          @click="setQueue(recentlyPlayed, idx); playTrack(song, 'preview')"
         >
           <div class="cover" :class="{ playing: isCurrentPlaying(song) }">
             <img v-if="getAlbumArt(song)" :src="getAlbumArt(song)" :alt="song.title" loading="lazy">

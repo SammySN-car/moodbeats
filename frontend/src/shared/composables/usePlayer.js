@@ -56,20 +56,6 @@ audio.addEventListener('timeupdate', () => {
   playerState.progress = (audio.currentTime / (audio.duration || 30)) * 100
 })
 
-audio.addEventListener('ended', () => {
-  playerState.isPlaying = false
-  playerState.currentTime = 0
-  playerState.progress = 0
-
-  // Track as a full play (user listened to the end)
-  if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
-    const duration = getEffectiveDuration()
-    sendListeningEvent(playerState.currentTrack.id, 'play', duration)
-    lastEventSongId = playerState.currentTrack.id
-  }
-  playStartedAt = null
-})
-
 audio.addEventListener('play', () => {
   playerState.isPlaying = true
   // Record when play started for skip detection
@@ -87,11 +73,20 @@ export function usePlayer() {
   if (!audio._autoPlayRegistered) {
     audio._autoPlayRegistered = true
     audio.addEventListener('ended', () => {
+      // Send play event for the completed track
+      if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
+        const duration = getEffectiveDuration()
+        sendListeningEvent(playerState.currentTrack.id, 'play', duration)
+        lastEventSongId = playerState.currentTrack.id
+      }
+      playStartedAt = null
+      playerState.isPlaying = false
+      playerState.currentTime = 0
+      playerState.progress = 0
+
+      // Advance to next in queue
       if (playerState.queue.length > 0) {
-        const nextIdx = playerState.queueIndex + 1
-        if (nextIdx < playerState.queue.length) {
-          playTrack(playerState.queue[nextIdx], playerState.mode)
-        }
+        nextInQueue()
       }
     })
   }
@@ -203,6 +198,7 @@ export function usePlayer() {
     playerState.isPlaying = false
     playerState.currentTime = 0
     playerState.progress = 0
+    nextInQueue()
   }
 
   function toggleMode(newMode) {

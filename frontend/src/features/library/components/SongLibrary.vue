@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
 
-const { playTrack, playFullTrack, playerState } = usePlayer()
+const { playTrack, playFullTrack, playerState, setQueue } = usePlayer()
 
 const songs = ref([])
 const loading = ref(true)
@@ -81,6 +81,11 @@ async function deleteSong(id) {
 
 function isCurrentPlaying(song, type) {
   return playerState.currentTrack?.id === song.id && playerState.isPlaying && (!type || playerState.mode === type)
+}
+
+function playSong(song) {
+  setQueue(filteredSongs.value, filteredSongs.value.findIndex(s => s.id === song.id))
+  playTrack(song, 'preview')
 }
 
 // Album art cache - fetches from iTunes on-demand
@@ -210,7 +215,7 @@ onUnmounted(() => observer?.disconnect())
         class="song-row"
         :class="{ playing: isCurrentPlaying(song, 'preview') }"
         type="button"
-        @click="playTrack(song, 'preview')"
+        @click="playSong(song)"
       >
         <span>{{ String(index + 1).padStart(2, '0') }}</span>
         <span class="title">
@@ -225,7 +230,7 @@ onUnmounted(() => observer?.disconnect())
         <span>{{ song.play_count || 0 }}</span>
         <span>{{ song.skip_count || 0 }}</span>
         <span class="row-actions">
-          <button type="button" :class="{ active: isCurrentPlaying(song, 'preview') }" @click.stop="playTrack(song, 'preview')" title="Play 30s">{{ isCurrentPlaying(song, 'preview') ? '⏸' : '🎧' }}</button>
+          <button type="button" :class="{ active: isCurrentPlaying(song, 'preview') }" @click.stop="playSong(song)" title="Play 30s">{{ isCurrentPlaying(song, 'preview') ? '⏸' : '🎧' }}</button>
           <button type="button" :class="{ active: isCurrentPlaying(song, 'full') }" @click.stop="playFullTrack(song)" title="Play full">{{ isCurrentPlaying(song, 'full') ? '⏸' : '🎵' }}</button>
           <button type="button" @click.stop="deleteSong(song.id)" title="Remove">×</button>
         </span>
