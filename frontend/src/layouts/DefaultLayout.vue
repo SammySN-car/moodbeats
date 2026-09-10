@@ -59,6 +59,7 @@ const isActive = (path) => route.path === path
 // YouTube IFrame API
 const ytPlayer = ref(null)
 let ytPlayerInstance = null
+const ytOverlayActive = ref(true)
 
 function loadYtApi() {
   if (window.YT && window.YT.Player) return Promise.resolve()
@@ -100,6 +101,7 @@ function initYtPlayer(videoId) {
 
 watch(() => playerState.youtubeVideoId, async (newId) => {
   if (newId) {
+    ytOverlayActive.value = true
     await loadYtApi()
     await nextTick()
     initYtPlayer(newId)
@@ -253,6 +255,7 @@ const handleSeek = (val) => {
     <!-- Hidden YouTube player for full song mode -->
     <div v-if="playerState.youtubeVideoId" class="yt-container">
       <div ref="ytPlayer" class="yt-iframe"></div>
+      <div v-if="ytOverlayActive" class="yt-overlay" @click="ytOverlayActive = false"></div>
     </div>
   </div>
 </template>
@@ -595,6 +598,13 @@ const handleSeek = (val) => {
   width: 100%;
   height: 100%;
   border: 0;
+  position: relative;
+}
+.yt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: pointer;
 }
 .yt-iframe iframe,
 .yt-iframe > iframe {
