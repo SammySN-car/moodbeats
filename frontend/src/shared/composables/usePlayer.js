@@ -73,6 +73,7 @@ export function usePlayer() {
   if (!audio._autoPlayRegistered) {
     audio._autoPlayRegistered = true
     audio.addEventListener('ended', () => {
+      console.log('[AUTO-PLAY] ended fired. queue:', playerState.queue.length, 'queueIndex:', playerState.queueIndex, 'track:', playerState.currentTrack?.title)
       // Send play event for the completed track
       if (playerState.currentTrack?.id && lastEventSongId !== playerState.currentTrack.id) {
         const duration = getEffectiveDuration()
@@ -85,8 +86,11 @@ export function usePlayer() {
       playerState.progress = 0
 
       // Advance to next in queue
+      console.log('[AUTO-PLAY] queue.length:', playerState.queue.length, 'queueIndex:', playerState.queueIndex)
       if (playerState.queue.length > 0) {
         nextInQueue()
+      } else {
+        console.log('[AUTO-PLAY] queue is EMPTY - nothing to play next')
       }
     })
   }
@@ -115,6 +119,7 @@ export function usePlayer() {
     // Reset tracking for the new track
     lastEventSongId = null
     playStartedAt = null
+    console.log('[PLAY-TRACK]', track.title, 'mode:', mode, 'queue:', playerState.queue.length, 'queueIndex:', playerState.queueIndex)
 
     playerState.currentTrack = track
     // Update queue index if track is in queue
@@ -252,6 +257,7 @@ export function usePlayer() {
   }
 
   function setQueue(tracks, startIndex = 0) {
+    console.log('[SET-QUEUE] tracks:', tracks.length, 'startIndex:', startIndex, 'first track:', tracks[0]?.title)
     playerState.queue = tracks
     playerState.queueIndex = startIndex
   }
