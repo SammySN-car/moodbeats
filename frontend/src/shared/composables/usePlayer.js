@@ -128,6 +128,7 @@ export function usePlayer() {
     playerState.mode = mode
     playerState.currentTime = 0
     playerState.progress = 0
+    console.log('[PLAY] mode:', mode, 'track:', track.title)
 
     if (mode === 'preview') {
       let previewUrl = track.preview_url
@@ -178,7 +179,10 @@ export function usePlayer() {
         params: { title: track.title, artist: track.artist || '' }
       })
       if (res.data?.video_id) {
+        console.log('[FULL] setting youtubeVideoId:', res.data.video_id, 'for:', track.title)
         playerState.youtubeVideoId = res.data.video_id
+      } else {
+        console.log('[FULL] no video_id returned for:', track.title)
       }
     } catch (err) {
       console.warn('Could not fetch YouTube ID:', err)
@@ -263,11 +267,14 @@ export function usePlayer() {
   }
 
   function nextInQueue() {
-    if (playerState.queue.length === 0) return
+    if (playerState.queue.length === 0) { console.log('[NEXT] queue empty'); return }
     const nextIdx = playerState.queueIndex + 1
+    console.log('[NEXT] queueIndex:', playerState.queueIndex, '-> nextIdx:', nextIdx, 'queueLen:', playerState.queue.length, 'nextTrack:', playerState.queue[nextIdx]?.title)
     if (nextIdx < playerState.queue.length) {
       playerState.queueIndex = nextIdx
       playTrack(playerState.queue[nextIdx], playerState.mode)
+    } else {
+      console.log('[NEXT] at end of queue')
     }
   }
 
