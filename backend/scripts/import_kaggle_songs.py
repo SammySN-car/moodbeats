@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from models import Base, Song
 from config import settings
 from ml.knowledge_service import knowledge_service
+from ml.genre_classifier import classify_song
 
 CSV_PATH = Path(__file__).parent.parent / 'data' / 'dataset.csv'
 BATCH_SIZE = 128
@@ -50,9 +51,16 @@ def classify_batch(row):
         'instrumentalness': float(getattr(row, 'instrumentalness', 0.0)),
         'speechiness': float(getattr(row, 'speechiness', 0.05)),
         'tempo': float(getattr(row, 'tempo', 120)),
+        'liveness': float(getattr(row, 'liveness', 0.2)),
+        'loudness': float(getattr(row, 'loudness', -8.0)),
     }
     mood, confidence, _ = knowledge_service.classify_mood_from_features(features)
-    return mood, confidence
+
+    # Use genre classifier with direct mapping when Kaggle label available
+    kaggle_genre = str(getattr(row, 'track_genre', ''))
+    genre = classify_song(features, kaggle_genre)
+
+    return mood, confidence, genre
 
 
 def build_song_text(row):
@@ -138,7 +146,7 @@ def import_to_database(df, embeddings):
                 danceability = float(getattr(row, 'danceability', 0.5))
                 duration_ms = float(getattr(row, 'duration_ms', 0))
 
-                mood, confidence = classify_batch(row)
+                mood, confidence, genre = classify_batch(row)
 
                 song = Song(
                     user_id=DEMO_USER_ID,
@@ -157,7 +165,7 @@ def import_to_database(df, embeddings):
                     mood_confidence=confidence,
                     lyrics_sentiment=0.0,
                     embedding=json.dumps(embeddings[idx].tolist()),
-                    genre=str(getattr(row, 'track_genre', 'unknown')),
+                    genre=genre,
                     acousticness=float(getattr(row, 'acousticness', 0.0)),
                     instrumentalness=float(getattr(row, 'instrumentalness', 0.0)),
                     speechiness=float(getattr(row, 'speechiness', 0.0)),

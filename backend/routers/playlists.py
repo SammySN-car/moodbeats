@@ -1,6 +1,8 @@
-from typing import List
+﻿from typing import List, Optional
+import re
 import json
 import traceback
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from database import get_db
@@ -81,7 +83,7 @@ def generate_mood_playlist(
                 # It's already a valid DB ID
                 ordered_ids.append(sid)
             elif isinstance(sid, int) and 1 <= sid <= len(ranked_id_order):
-                # It's a positional index — convert to DB ID
+                # It's a positional index - convert to DB ID
                 ordered_ids.append(ranked_id_order[sid - 1])
             elif str(sid) in lib_song_map:
                 # It's a string DB ID
@@ -139,3 +141,151 @@ def delete_playlist(playlist_id: int, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=404, detail="Playlist not found")
     db.delete(playlist)
     db.commit()
+
+
+# --- Spotify Playlist Import ---
+
+class SpotifyImportRequest(BaseModel):
+    spotify_url: str = Field(..., description="Spotify playlist URL")
+
+class SpotifyImportResponse(BaseModel):
+    playlist_id: int
+    playlist_name: str
+    total_tracks: int
+    matched_tracks: int
+    unmatched_tracks: int
+    unmatched_samples: List[str] = Field(default_factory=list)
+
+
+def parse_spotify_playlist_id(url: str) -> str:
+    """Extract playlist ID from Spotify URL."""
+    # Handle: https://open.spotify.com/playlist/XXXXX?si=...
+    # Handle: spotify:playlist:XXXXX
+    # Handle: https://open.spotify.com/embed/playlist/XXXXX
+    patterns = [
+        r'spotify\.com/(?:embed/)?playlist/([a-zA-Z0-9]{22})',
+        r'spotify:playlist:([a-zA-Z0-9]{22})',
+    ]
+    for pat in patterns:
+        m = re.search(pat, url)
+        if m:
+            return m.group(1)
+    raise ValueError("Invalid Spotify playlist URL. Expected format: https://open.spotify.com/playlist/{id}")
+
+@router.post("/import-spotify", response_model=SpotifyImportResponse)
+def import_spotify_playlist(
+    payload: SpotifyImportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Import a public Spotify playlist into MoodBeats.
+    Fetches all tracks via spotifyscraper (no auth needed),
+    matches them against the user's existing songs in the DB,
+    and creates a new playlist with the matches."""
+    try:
+        playlist_id_str = parse_spotify_playlist_id(payload.spotify_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Fetch playlist from Spotify using spotifyscraper
+    try:
+        from spotify_scraper import SpotifyClient
+        with SpotifyClient() as client:
+            sp_playlist = client.get_playlist(
+                f"https://open.spotify.com/playlist/{playlist_id_str}",
+                max_tracks=None  # fetch ALL tracks
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch Spotify playlist: {str(e)}")
+
+    if not sp_playlist or not sp_playlist.tracks:
+        raise HTTPException(status_code=404, detail="Playlist not found or is empty")
+
+    # Build a lookup of user's existing songs by (title_lower, artist_lower)
+    user_songs = db.query(Song).filter(Song.user_id == current_user.id).all()
+    song_lookup = {}
+    for s in user_songs:
+        key = (s.title.strip().lower(), s.artist.strip().lower())
+        song_lookup[key] = s
+        # Also index by spotify_id for direct match
+        if s.spotify_id:
+            song_lookup[("sid", s.spotify_id)] = s
+
+    # Match Spotify tracks to DB songs
+    matched_song_ids = []
+    unmatched_samples = []
+    matched_count = 0
+    unmatched_count = 0
+
+    for pt in sp_playlist.tracks:
+        t = pt.track
+        artists_str = ", ".join(a.name for a in t.artists)
+        title = t.name.strip()
+        spotify_track_id = t.id
+
+        # Strategy 1: exact spotify_id match
+        key_sid = ("sid", spotify_track_id)
+        if key_sid in song_lookup:
+            matched_song_ids.append(song_lookup[key_sid].id)
+            matched_count += 1
+            continue
+
+        # Strategy 2: title + primary artist match (case-insensitive)
+        primary_artist = t.artists[0].name.strip().lower() if t.artists else ""
+        key_ta = (title.lower(), primary_artist)
+        if key_ta in song_lookup:
+            matched_song_ids.append(song_lookup[key_ta].id)
+            matched_count += 1
+            continue
+
+        # Strategy 3: fuzzy title match (title in DB title OR DB title in title)
+        found = False
+        for (db_title, db_artist), db_song in song_lookup.items():
+            if db_title.startswith("sid"):
+                continue
+            if title.lower() in db_title or db_title in title.lower():
+                # Also check artist overlap
+                if primary_artist in db_artist or db_artist in primary_artist:
+                    matched_song_ids.append(db_song.id)
+                    matched_count += 1
+                    found = True
+                    break
+        if not found:
+            unmatched_count += 1
+            if len(unmatched_samples) < 10:
+                unmatched_samples.append(f"{title} - {artists_str}")
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique_ids = []
+    for sid in matched_song_ids:
+        if sid not in seen:
+            seen.add(sid)
+            unique_ids.append(sid)
+
+    # Create the playlist
+    new_playlist = Playlist(
+        user_id=current_user.id,
+        name=sp_playlist.name or "Imported Playlist",
+        description=f"Imported from Spotify playlist by {sp_playlist.owner.name if sp_playlist.owner else 'Unknown'}",
+        source_prompt=f"spotify:{playlist_id_str}",
+        is_auto=False
+    )
+    db.add(new_playlist)
+    db.commit()
+    db.refresh(new_playlist)
+
+    for idx, song_id in enumerate(unique_ids):
+        item = PlaylistItem(playlist_id=new_playlist.id, song_id=song_id, position=idx + 1)
+        db.add(item)
+    db.commit()
+    db.refresh(new_playlist)
+
+    return SpotifyImportResponse(
+        playlist_id=new_playlist.id,
+        playlist_name=new_playlist.name,
+        total_tracks=len(sp_playlist.tracks),
+        matched_tracks=len(unique_ids),
+        unmatched_tracks=unmatched_count,
+        unmatched_samples=unmatched_samples
+    )

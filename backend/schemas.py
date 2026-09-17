@@ -60,6 +60,7 @@ class SongResponse(BaseModel):
     valence: Optional[float] = 0.0
     mood: Optional[str] = None
     mood_confidence: Optional[float] = 0.0
+    genre: Optional[str] = None
     lyrics_sentiment: Optional[float] = 0.0
     similarity_score: Optional[float] = None
     # Feedback loop fields

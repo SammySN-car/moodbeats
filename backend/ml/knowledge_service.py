@@ -120,7 +120,17 @@ class KnowledgeService:
             confidence = round(float(sorted_items[0][1]), 4)
         
         return best_mood, confidence, mood_probs
-    
+
+    def classify_genre_from_features(self, features: Dict[str, float],
+                                      kaggle_genre: str = None) -> str:
+        """
+        Classify genre using the genre classifier.
+        If kaggle_genre is provided, uses direct mapping (100% accurate).
+        Otherwise falls back to rule-based classification from audio features.
+        """
+        from ml.genre_classifier import classify_song
+        return classify_song(features, kaggle_genre)
+
     def get_mood_distribution(self) -> Dict[str, Dict]:
         """Get mood distribution from knowledge base."""
         if not self.is_loaded:
