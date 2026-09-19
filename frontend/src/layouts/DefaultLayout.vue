@@ -46,6 +46,11 @@ const navigation = [
         icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>'
       },
       {
+        label: 'Spotify Import',
+        route: '/import-spotify',
+        icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 15c3.5-1 7-1 10.5 0"/><path d="M7 12c4-1.5 8.5-1.5 12.5 0"/><path d="M6 9c5-2 11-2 16 0"/></svg>'
+      },
+      {
         label: 'Mood Analytics',
         route: '/analytics',
         icon: '<svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'

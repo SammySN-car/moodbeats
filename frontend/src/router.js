@@ -12,6 +12,7 @@ const routes = [
       { path: 'library', name: 'Library', component: () => import('./features/library/views/LibraryView.vue') },
       { path: 'library/:id', name: 'SongDetail', component: () => import('./features/library/components/SongDetail.vue') },
       { path: 'import', name: 'Import', component: () => import('./features/import/views/ImportView.vue') },
+      { path: 'import-spotify', name: 'SpotifyImport', component: () => import('./features/import/components/SpotifyPlaylistImport.vue') },
       { path: 'analytics', name: 'Analytics', component: () => import('./features/analytics/views/AnalyticsView.vue') },
       { path: 'playlists', name: 'Playlists', component: () => import('./features/discover/components/PlaylistHistory.vue') },
     ]
