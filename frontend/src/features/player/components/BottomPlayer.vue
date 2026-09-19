@@ -4,8 +4,8 @@
       <div class="track-info">
         <button class="art-button" type="button" aria-label="Open track details">
           <img
-            v-if="track.album_art_url || track.album_art || albumArt"
-            :src="track.album_art_url || track.album_art || albumArt"
+            v-if="track.album_art_url || track.album_art || getAlbumArt(track)"
+            :src="track.album_art_url || track.album_art || getAlbumArt(track)"
             :alt="`${track.title || 'Track'} artwork`"
             loading="lazy"
           />
@@ -66,6 +66,10 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import client from '../../../api/client'
+import { useAlbumArt } from '../../../shared/composables/useAlbumArt'
+
+const { fetchAlbumArt, getAlbumArt, getArtFallback } = useAlbumArt()
 
 const props = defineProps({
   track: { type: Object, default: null },
@@ -89,42 +93,17 @@ const emit = defineEmits([
   'toggle-mode'
 ])
 
-// Album art from iTunes
+// Album art from shared cache
 const albumArt = ref(null)
+const artGradient = ref('linear-gradient(135deg, #667eea 0%, #764ba2 100%)')
 
-const gradients = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-]
-
-const artGradient = ref(gradients[0])
-
-function computeGradient(title) {
-  if (!title) return gradients[0]
-  let hash = 0
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash)
+watch(() => props.track, (t) => {
+  if (!t) return
+  artGradient.value = getArtFallback(t.title)
+  if (!t.album_art_url && !t.album_art) {
+    fetchAlbumArt(t).then(url => { albumArt.value = url })
   }
-  return gradients[Math.abs(hash) % gradients.length]
-}
-
-async function fetchArt(track) {
-  if (!track) return
-  artGradient.value = computeGradient(track.title)
-  if (track.album_art_url || track.album_art) return
-  try {
-    const res = await fetch(`/api/songs/album-art?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist || '')}`)
-    const data = await res.json()
-    albumArt.value = data.album_art_url
-  } catch {
-    albumArt.value = null
-  }
-}
-
-watch(() => props.track, (t) => { fetchArt(t) }, { immediate: true })
+}, { immediate: true })
 
 const formatTime = (seconds) => {
   const value = Number(seconds) || 0

@@ -10,8 +10,10 @@ const routes = [
       { path: 'home', name: 'Home', component: () => import('./features/home/views/HomeView.vue') },
       { path: 'discover', name: 'Discover', component: () => import('./features/discover/views/DiscoverView.vue') },
       { path: 'library', name: 'Library', component: () => import('./features/library/views/LibraryView.vue') },
+      { path: 'library/:id', name: 'SongDetail', component: () => import('./features/library/components/SongDetail.vue') },
       { path: 'import', name: 'Import', component: () => import('./features/import/views/ImportView.vue') },
       { path: 'analytics', name: 'Analytics', component: () => import('./features/analytics/views/AnalyticsView.vue') },
+      { path: 'playlists', name: 'Playlists', component: () => import('./features/discover/components/PlaylistHistory.vue') },
     ]
   },
   {

@@ -2,8 +2,17 @@
 import { ref, computed, watch } from 'vue'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
+import { useAlbumArt } from '../../../shared/composables/useAlbumArt'
 
 const { playTrack, playFullTrack, playerState, setQueue } = usePlayer()
+const { fetchAlbumArt, getAlbumArt, getArtFallback: getArtGradient, fetchBatch } = useAlbumArt()
+
+function formatDuration(sec) {
+  if (!sec) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 const mood = ref('')
 const isGenerating = ref(false)
 const playlist = ref(null)
@@ -70,49 +79,6 @@ function playRec(rec, mode = 'preview') {
   playTrack(rec, mode)
 }
 
-// Album art cache
-const albumArtCache = ref({})
-
-async function fetchAlbumArt(song) {
-  const key = `${song.title}-${song.artist}`
-  if (albumArtCache.value[key] !== undefined) return
-  albumArtCache.value[key] = null
-  try {
-    const res = await client.get('/songs/album-art', {
-      params: { title: song.title, artist: song.artist || '' }
-    })
-    albumArtCache.value[key] = res.data?.album_art_url || null
-  } catch {
-    albumArtCache.value[key] = null
-  }
-}
-
-function getAlbumArt(song) {
-  const key = `${song.title}-${song.artist}`
-  return albumArtCache.value[key]
-}
-
-const gradients = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
-  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
-  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
-  'linear-gradient(135deg, #f5576c 0%, #ff6a88 100%)',
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-]
-
-function getArtGradient(title) {
-  if (!title) return gradients[0]
-  let hash = 0
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return gradients[Math.abs(hash) % gradients.length]
-}
 </script>
 
 <template>
@@ -146,6 +112,10 @@ function getArtGradient(title) {
         <p class="eyebrow">YOUR PLAYLIST</p>
         <h2>{{ playlist.name }}</h2>
         <p class="subcopy">"{{ playlist.description }}"</p>
+        <div v-if="playlist.quality_score" class="quality-badge">
+          <span class="quality-score">{{ playlist.quality_score }}</span>
+          <span class="quality-label">Quality Score</span>
+        </div>
       </div>
       <div v-if="playlist.items?.length" class="bars">
         <div v-for="(item, i) in playlist.items.slice(0, 4)" :key="item.id" class="bar-row">
@@ -193,6 +163,8 @@ function getArtGradient(title) {
             </div>
           </div>
           <span class="mood-badge">{{ item.song.mood || 'Chill' }}</span>
+          <span v-if="item.song.duration_sec" class="duration-text">{{ formatDuration(item.song.duration_sec) }}</span>
+          <p v-if="playlist.track_explanations?.[item.id]" class="track-explanation">{{ playlist.track_explanations[item.id] }}</p>
           <div class="feedback">
             <button type="button" :class="{ active: isCurrentPlaying(item.song, 'preview') }" @click="playItem(item)">{{ isCurrentPlaying(item.song, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
             <button type="button" :class="{ active: isCurrentPlaying(item.song, 'full') }" @click="playItem(item, 'full')">{{ isCurrentPlaying(item.song, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
@@ -221,6 +193,7 @@ function getArtGradient(title) {
             </div>
           </div>
           <span class="mood-badge">{{ rec.mood || 'Chill' }}</span>
+          <span v-if="rec.duration_sec" class="duration-text">{{ formatDuration(rec.duration_sec) }}</span>
           <div class="feedback">
             <button type="button" :class="{ active: isCurrentPlaying(rec, 'preview') }" @click="playRec(rec)">{{ isCurrentPlaying(rec, 'preview') ? '⏸ 30s' : '🎧 30s' }}</button>
             <button type="button" :class="{ active: isCurrentPlaying(rec, 'full') }" @click="playRec(rec, 'full')">{{ isCurrentPlaying(rec, 'full') ? '⏸ Full' : '🎵 Full' }}</button>
@@ -284,6 +257,11 @@ h2{margin:0;font-size:20px;letter-spacing:-.03em}
 .feedback button.active{border-color:#f5b942;background:rgba(245,185,66,.13);color:#f5b942}
 .import-btn{padding:5px 8px;border:1px solid #f5b942;border-radius:7px;background:rgba(245,185,66,.13);color:#f5b942;font-size:10px;cursor:pointer;font-weight:600}
 .import-btn:disabled{opacity:.5;cursor:wait}
+.quality-badge{display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid rgba(245,185,66,.3);border-radius:10px;background:rgba(245,185,66,.08);flex-shrink:0}
+.quality-score{font-size:28px;font-weight:800;color:#f5b942}
+.quality-label{font-size:10px;color:#8e97a6;text-transform:uppercase;letter-spacing:.08em}
+.track-explanation{margin:6px 0 0;color:#687180;font-size:10px;font-style:italic;line-height:1.4}
+.duration-text{color:#687180;font-size:10px;margin-left:4px}
 .empty{text-align:center;padding:70px 20px;border:1px dashed rgba(255,255,255,.12);border-radius:12px}
 .empty-icon{margin:auto auto 14px;color:#f5b942;font-size:46px}
 .empty h2{font-size:18px}

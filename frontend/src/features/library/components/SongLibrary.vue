@@ -1,9 +1,28 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
+import { useAlbumArt } from '../../../shared/composables/useAlbumArt'
 
-const { playTrack, playFullTrack, playerState, setQueue } = usePlayer()
+const router = useRouter()
+
+const { playTrack, playFullTrack, playerState, setQueue, toggleSave } = usePlayer()
+const { fetchAlbumArt, getAlbumArt, getArtFallback: getArtGradient, fetchBatch } = useAlbumArt()
+
+function formatDuration(sec) {
+  if (!sec) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+async function handleSave(song) {
+  const res = await toggleSave(song)
+  if (res) {
+    song.saved = !song.saved
+  }
+}
 
 const songs = ref([])
 const loading = ref(true)
@@ -88,57 +107,8 @@ function playSong(song, mode = 'preview') {
   playTrack(song, mode)
 }
 
-// Album art cache - fetches from iTunes on-demand
-const albumArtCache = ref({})
-
-async function fetchAlbumArt(song) {
-  if (albumArtCache.value[song.id] !== undefined) return
-  // Mark as loading
-  albumArtCache.value[song.id] = null
-  try {
-    const res = await client.get('/songs/album-art', {
-      params: { title: song.title, artist: song.artist || '' }
-    })
-    albumArtCache.value[song.id] = res.data?.album_art_url || null
-  } catch {
-    albumArtCache.value[song.id] = null
-  }
-}
-
-// Fetch album art for visible songs
-function fetchVisibleArt() {
-  filteredSongs.value.slice(0, 20).forEach(song => {
-    if (albumArtCache.value[song.id] === undefined) {
-      fetchAlbumArt(song)
-    }
-  })
-}
-
 // Watch for song changes and fetch art
-watch(filteredSongs, () => { fetchVisibleArt() }, { immediate: true })
-
-// Deterministic gradient fallback based on song title
-const gradients = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
-  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
-  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
-  'linear-gradient(135deg, #f5576c 0%, #ff6a88 100%)',
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-]
-
-function getArtGradient(title) {
-  if (!title) return gradients[0]
-  let hash = 0
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return gradients[Math.abs(hash) % gradients.length]
-}
+watch(filteredSongs, () => { fetchBatch(filteredSongs.value.slice(0, 20)) }, { immediate: true })
 
 // Infinite scroll with Intersection Observer
 const sentinel = ref(null)
@@ -205,6 +175,8 @@ onUnmounted(() => observer?.disconnect())
         <span>Title</span>
         <span>Artist</span>
         <span>Mood</span>
+        <span>Genre</span>
+        <span>Time</span>
         <span>Plays</span>
         <span>Skips</span>
         <span></span>
@@ -220,16 +192,19 @@ onUnmounted(() => observer?.disconnect())
         <span>{{ String(index + 1).padStart(2, '0') }}</span>
         <span class="title">
           <span class="mini-art">
-            <img v-if="albumArtCache[song.id]" :src="albumArtCache[song.id]" :alt="song.title" loading="lazy">
+            <img v-if="getAlbumArt(song)" :src="getAlbumArt(song)" :alt="song.title" loading="lazy">
             <span v-else :style="{ background: getArtGradient(song.title) }">{{ song.title?.charAt(0) || 'M' }}</span>
           </span>
-          <strong>{{ song.title }}</strong>
+          <router-link :to="`/library/${song.id}`" class="title-link" @click.stop>{{ song.title }}</router-link>
         </span>
         <span>{{ song.artist }}</span>
         <span><b class="badge">{{ song.mood || 'Chill' }}</b></span>
+        <span class="genre-cell">{{ song.genre || '—' }}</span>
+        <span>{{ formatDuration(song.duration_sec) }}</span>
         <span>{{ song.play_count || 0 }}</span>
         <span>{{ song.skip_count || 0 }}</span>
         <span class="row-actions">
+          <button type="button" :class="{ saved: song.saved }" @click.stop="handleSave(song)" title="Save">{{ song.saved ? '♥' : '♡' }}</button>
           <button type="button" :class="{ active: isCurrentPlaying(song, 'preview') }" @click.stop="playSong(song)" title="Play 30s">{{ isCurrentPlaying(song, 'preview') ? '⏸' : '🎧' }}</button>
           <button type="button" :class="{ active: isCurrentPlaying(song, 'full') }" @click.stop="playSong(song, 'full')" title="Play full">{{ isCurrentPlaying(song, 'full') ? '⏸' : '🎵' }}</button>
           <button type="button" @click.stop="deleteSong(song.id)" title="Remove">×</button>
@@ -269,7 +244,7 @@ onUnmounted(() => observer?.disconnect())
 .pills button.active{border-color:#f5b942;background:rgba(245,185,66,.13);color:#f5b942}
 .error-banner{margin:0 0 16px;padding:10px 14px;border:1px solid rgba(248,113,113,.3);border-radius:10px;background:rgba(248,113,113,.08);color:#f87171;font-size:12px}
 .table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:12px}
-.table-head,.song-row{min-width:750px;display:grid;grid-template-columns:40px 1.6fr 1.2fr .8fr .6fr .6fr 80px;align-items:center;gap:12px;padding:0 18px}
+.table-head,.song-row{min-width:900px;display:grid;grid-template-columns:40px 1.5fr 1fr .7fr .7fr .5fr .4fr .4fr .4fr 80px;align-items:center;gap:10px;padding:0 18px}
 .table-head{height:42px;color:#687180;font-size:10px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.08)}
 .song-row{width:100%;height:67px;border:0;border-bottom:1px solid rgba(255,255,255,.06);background:transparent;color:#8e97a6;text-align:left;font-size:12px;cursor:pointer;transition:.15s}
 .song-row:last-child{border-bottom:0}
@@ -277,7 +252,8 @@ onUnmounted(() => observer?.disconnect())
 .song-row.playing{background:rgba(245,185,66,.06)}
 .song-row.playing .title strong{color:#f5b942}
 .title{display:flex;align-items:center;gap:10px;min-width:0}
-.title strong{overflow:hidden;color:#f4f5f7;text-overflow:ellipsis;white-space:nowrap}
+.title-link{overflow:hidden;color:#f4f5f7;text-decoration:none;font-size:inherit;text-overflow:ellipsis;white-space:nowrap}
+.title-link:hover{text-decoration:underline;color:#f5b942}
 .mini-art{width:35px;height:35px;display:grid;place-items:center;flex:none;border-radius:7px;background:linear-gradient(135deg,#3a4350,#bf7a37);color:#fff;font-weight:800;font-size:13px;overflow:hidden}
 .mini-art img{width:100%;height:100%;object-fit:cover}
 .badge{padding:5px 8px;border-radius:99px;background:rgba(245,185,66,.13);color:#f5b942;font-size:10px;font-weight:600}
@@ -285,6 +261,8 @@ onUnmounted(() => observer?.disconnect())
 .song-row:hover .row-actions{opacity:1}
 .row-actions button{border:0;background:transparent;color:#687180;font-size:18px;cursor:pointer;transition:.15s}
 .row-actions button:hover,.row-actions button.active{color:#f5b942}
+.row-actions button.saved{color:#f5b942}
+.genre-cell{color:#687180;font-size:11px;text-transform:capitalize}
 .sentinel{height:1px}
 .loading-more{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px;color:#8e97a6;font-size:13px}
 .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.1);border-top-color:#f5b942;border-radius:50%;animation:spin .6s linear infinite}

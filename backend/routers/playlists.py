@@ -18,6 +18,26 @@ from config import settings
 
 router = APIRouter(prefix="/api/playlists", tags=["Playlists"])
 
+@router.get("", response_model=list[PlaylistResponse])
+def list_playlists(
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List the user's previously generated playlists."""
+    playlists = (
+        db.query(Playlist)
+        .filter(Playlist.user_id == current_user.id)
+        .order_by(Playlist.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for pl in playlists:
+        resp = PlaylistResponse.model_validate(pl)
+        result.append(resp)
+    return result
+
 @router.post("/generate", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)
 def generate_mood_playlist(
     payload: MoodPromptRequest,

@@ -6,7 +6,7 @@ import BottomPlayer from '../features/player/components/BottomPlayer.vue'
 
 const router = useRouter()
 const route = useRoute()
-const { playerState, togglePlay, toggleMode, skipTrack, seek, toggleMute, closePlayer, nextInQueue, sendListeningEvent } = usePlayer()
+const { playerState, togglePlay, toggleMode, skipTrack, prevInQueue, seek, toggleMute, closePlayer, nextInQueue, sendListeningEvent, setVolume } = usePlayer()
 
 const userName = computed(() => localStorage.getItem('userName') || 'Listener')
 const userInitials = computed(() => {
@@ -49,6 +49,11 @@ const navigation = [
         label: 'Mood Analytics',
         route: '/analytics',
         icon: '<svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'
+      },
+      {
+        label: 'Playlists',
+        route: '/playlists',
+        icon: '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
       }
     ]
   }
@@ -245,8 +250,9 @@ const handleSeek = (val) => {
       :mode="playerState.mode"
       @toggle-play="togglePlay"
       @next="skipTrack"
-      @previous="skipTrack"
-      @seek="(val) => {}"
+      @previous="prevInQueue"
+      @seek="handleSeek"
+      @update:volume="setVolume"
       @toggle-mute="toggleMute"
       @close="closePlayer"
       @toggle-mode="toggleMode"

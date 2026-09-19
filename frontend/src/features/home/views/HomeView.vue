@@ -3,12 +3,20 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
+import { useAlbumArt } from '../../../shared/composables/useAlbumArt'
 
 const router = useRouter()
 const { playTrack, playFullTrack, playerState, setQueue } = usePlayer()
+const { fetchAlbumArt, getAlbumArt, getArtFallback: getArtGradient, fetchBatch } = useAlbumArt()
+
+function formatDuration(sec) {
+  if (!sec) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 const recentlyPlayed = ref([])
-const topMoods = ref([])
 const recommendations = ref([])
 const loading = ref(true)
 
@@ -35,62 +43,19 @@ const moodCards = [
   { mood: 'energetic', label: 'Energetic', emoji: '⚡', gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', desc: 'Workout, party, hype' },
 ]
 
-const gradients = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-]
-
-function getArtGradient(title) {
-  if (!title) return gradients[0]
-  let hash = 0
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return gradients[Math.abs(hash) % gradients.length]
-}
-
-// Album art cache
-const albumArtCache = ref({})
-
-async function fetchAlbumArt(song) {
-  const key = `${song.title}-${song.artist}`
-  if (albumArtCache.value[key] !== undefined) return
-  albumArtCache.value[key] = null
-  try {
-    const res = await client.get('/songs/album-art', {
-      params: { title: song.title, artist: song.artist || '' }
-    })
-    albumArtCache.value[key] = res.data?.album_art_url || null
-  } catch {
-    albumArtCache.value[key] = null
-  }
-}
-
-function getAlbumArt(song) {
-  const key = `${song.title}-${song.artist}`
-  return albumArtCache.value[key]
-}
-
 async function loadHome() {
   loading.value = true
   try {
     // Load recently played
     const recentRes = await client.get('/listening/history', { params: { limit: 8 } })
     recentlyPlayed.value = recentRes.data.map(h => h.song || h).slice(0, 8)
-    recentlyPlayed.value.forEach(s => fetchAlbumArt(s))
-
-    // Load top moods from library
-    const moodsRes = await client.get('/songs', { params: { limit: 4 } })
-    topMoods.value = moodsRes.data
+    fetchBatch(recentlyPlayed.value)
 
     // Load recommendations
     const recRes = await client.post('/playlists/generate', { prompt: 'upbeat happy vibes' })
     if (recRes.data?.items) {
       recommendations.value = recRes.data.items.slice(0, 4).map(i => i.song)
-      recommendations.value.forEach(s => fetchAlbumArt(s))
+      fetchBatch(recommendations.value)
     }
   } catch (e) {
     console.warn('Home load error:', e)
@@ -178,6 +143,7 @@ onMounted(loadHome)
           </div>
           <strong>{{ song.title }}</strong>
           <span>{{ song.artist }}</span>
+          <span v-if="song.duration_sec" class="recent-duration">{{ formatDuration(song.duration_sec) }}</span>
         </article>
       </div>
     </section>
@@ -262,6 +228,7 @@ onMounted(loadHome)
 .recent-card:hover .play-overlay { opacity: 1; }
 .recent-card strong { display: block; overflow: hidden; font-size: 12px; color: #f4f5f7; text-overflow: ellipsis; white-space: nowrap; }
 .recent-card span { font-size: 11px; color: #8e97a6; }
+.recent-duration { font-size: 10px; color: #687180; }
 
 .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .quick-btn { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border: 0; border-radius: 10px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: .2s; }

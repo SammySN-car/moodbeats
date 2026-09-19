@@ -229,6 +229,11 @@ export function usePlayer() {
     }
   }
 
+  function setVolume(val) {
+    playerState.volume = val
+    audio.volume = val
+  }
+
   function seek(e) {
     if (playerState.mode !== 'preview') return
     const rect = e.currentTarget.getBoundingClientRect()
@@ -300,7 +305,7 @@ export function usePlayer() {
     try {
       const res = await client.post('/listening/event', {
         song_id: track.id,
-        event_type: 'save',
+        event_type: track.saved ? 'unsave' : 'save',
         duration_listened: 0
       })
       return res.data
@@ -323,7 +328,8 @@ export function usePlayer() {
     sendListeningEvent,
     setQueue,
     nextInQueue,
-    prevInQueue
+    prevInQueue,
+    setVolume
   }
 }
 
