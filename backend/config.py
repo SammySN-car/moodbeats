@@ -1,8 +1,9 @@
+import secrets
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "MoodBeats API"
-    SECRET_KEY: str = "moodbeats-super-secret-jwt-key-change-in-production"
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_DAYS: int = 7
     DATABASE_URL: str = "sqlite:///./moodbeats.db"
@@ -35,3 +36,6 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 settings = Settings()
+
+if not settings.SECRET_KEY:
+    settings.SECRET_KEY = secrets.token_hex(32)

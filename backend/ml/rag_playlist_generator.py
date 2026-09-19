@@ -181,7 +181,7 @@ def hybrid_faiss_rag_search(
     planner_mood = plan.get("mood") if plan else None
     query = db_session.query(Song).filter(Song.id.in_(candidate_ids))
     if user_id is not None:
-        query = query.filter((Song.user_id == user_id) | (Song.user_id == settings.DEMO_USER_ID))
+        query = query.filter(Song.user_id == user_id)
     if planner_mood:
         query = query.filter(Song.mood == planner_mood)
     candidate_songs = query.all()
@@ -190,7 +190,7 @@ def hybrid_faiss_rag_search(
     if not candidate_songs and planner_mood:
         query = db_session.query(Song).filter(Song.id.in_(candidate_ids))
         if user_id is not None:
-            query = query.filter((Song.user_id == user_id) | (Song.user_id == settings.DEMO_USER_ID))
+            query = query.filter(Song.user_id == user_id)
         candidate_songs = query.all()
 
     if not candidate_songs:

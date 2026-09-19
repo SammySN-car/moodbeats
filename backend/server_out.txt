@@ -1,0 +1,4 @@
+Loaded knowledge base: 114,000 tracks, 114 genres, 7 mood categories
+FAISS index loaded: 89740 vectors
+Pre-warming PyTorch Neural Models into RAM...
+MoodBeats PyTorch RAG API is ready!

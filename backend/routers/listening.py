@@ -55,14 +55,10 @@ def record_listening_event(
 
     db.commit()
 
-    event_count = db.query(ListeningEvent).filter(
-        ListeningEvent.user_id == current_user.id
-    ).count()
-
     message = ""
-    if event_count % TASTE_RECOMPUTE_INTERVAL == 0:
+    if event.id % TASTE_RECOMPUTE_INTERVAL == 0:
         _recompute_taste_vector(current_user, db)
-        message = f"Taste vector recomputed (after {event_count} events)"
+        message = f"Taste vector recomputed (after {event.id} events)"
 
     return ListeningEventResponse(
         play_count=song.play_count,

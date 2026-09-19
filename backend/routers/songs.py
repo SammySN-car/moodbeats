@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/songs", tags=["Songs"])
 
 
 @router.get("/youtube-id")
-def get_youtube_id(title: str, artist: Optional[str] = ""):
+def get_youtube_id(title: str, artist: Optional[str] = "", current_user: User = Depends(get_current_user)):
     """Find official audio on YouTube via yt-dlp."""
     vid = find_youtube_video_id(artist or "", title)
     return {"video_id": vid}
@@ -165,9 +165,7 @@ def import_itunes_song(
     album_art = track.get("artworkUrl100", "")
     duration_ms = track.get("trackTimeMillis", 0)
 
-    # Basic audio features from iTunes (limited — no real analysis)
-    # Use reasonable defaults for mood classification
-    audio_features = {
+    mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features({
         "tempo": 100.0,
         "energy": 0.5,
         "danceability": 0.5,
@@ -175,8 +173,7 @@ def import_itunes_song(
         "acousticness": 0.3,
         "instrumentalness": 0.0,
         "speechiness": 0.05,
-    }
-    mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features(audio_features)
+    })
 
     # Generate embedding
     profile_text = knowledge_service.build_song_profile(
@@ -247,6 +244,7 @@ def count_songs(
 def get_album_art(
     title: str,
     artist: str,
+    current_user: User = Depends(get_current_user),
 ):
     """Fetch album art from iTunes on-demand."""
     query = f"{title} {artist}"
@@ -260,6 +258,7 @@ def get_album_art(
 def get_preview_url(
     title: str,
     artist: str,
+    current_user: User = Depends(get_current_user),
 ):
     """Fetch 30s preview URL from iTunes on-demand."""
     query = f"{title} {artist}"
