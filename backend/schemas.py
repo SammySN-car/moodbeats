@@ -91,7 +91,7 @@ class PlaylistCreate(BaseModel):
 class PlaylistItemResponse(BaseModel):
     id: int
     position: int
-    song: SongResponse
+    song: Optional[SongResponse] = None
     model_config = ConfigDict(from_attributes=True)
 
 class PlaylistResponse(BaseModel):

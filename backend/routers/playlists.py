@@ -36,8 +36,15 @@ def list_playlists(
     )
     result = []
     for pl in playlists:
-        resp = PlaylistResponse.model_validate(pl)
-        result.append(resp)
+        try:
+            # Filter out items with deleted songs before validation
+            valid_items = [item for item in pl.items if item.song is not None]
+            pl.items = valid_items
+            resp = PlaylistResponse.model_validate(pl)
+            result.append(resp)
+        except Exception:
+            # Skip playlists that still fail validation
+            continue
     return result
 
 @router.post("/generate", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)
