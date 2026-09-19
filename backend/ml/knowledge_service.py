@@ -50,13 +50,11 @@ class KnowledgeService:
     def is_loaded(self):
         return self._loaded and bool(self.kb)
     
-    # ── MOOD CLASSIFICATION ──────────────────────────────
+    # -- MOOD CLASSIFICATION --
     
     def classify_mood_from_features(self, features: Dict[str, float]) -> Tuple[str, float, Dict[str, float]]:
-        """
-        Classify mood using Standardized Euclidean Distance + Softmax Probability.
-        Returns: (best_mood, confidence_margin, mood_probabilities)
-        """
+        """Classify mood using Standardized Euclidean Distance + Softmax Probability.
+        Returns: (best_mood, confidence_margin, mood_probabilities)"""
         if not self.is_loaded:
             return 'unknown', 0.0, {}
         
@@ -121,29 +119,7 @@ class KnowledgeService:
         
         return best_mood, confidence, mood_probs
 
-    def classify_genre_from_features(self, features: Dict[str, float],
-                                      kaggle_genre: str = None) -> str:
-        """
-        Classify genre using the genre classifier.
-        If kaggle_genre is provided, uses direct mapping (100% accurate).
-        Otherwise falls back to rule-based classification from audio features.
-        """
-        from ml.genre_classifier import classify_song
-        return classify_song(features, kaggle_genre)
-
-    def get_mood_distribution(self) -> Dict[str, Dict]:
-        """Get mood distribution from knowledge base."""
-        if not self.is_loaded:
-            return {}
-        return self.kb['moods']['distribution']
-    
-    def get_mood_for_genre(self, genre: str) -> Dict[str, float]:
-        """Get mood probability distribution for a genre."""
-        if not self.is_loaded:
-            return {}
-        return self.kb.get('mood_genre_matrix', {}).get(genre, {})
-    
-    # ── GENRE OPERATIONS ─────────────────────────────────
+    # -- GENRE OPERATIONS --
     
     def get_genre_profile(self, genre: str) -> Dict:
         """Get audio profile for a genre."""
@@ -158,23 +134,7 @@ class KnowledgeService:
         similarity = self.kb['genres']['similarity'].get(genre, [])
         return similarity[:top_n]
     
-    def get_genre_cluster(self, genre: str) -> Optional[int]:
-        """Get cluster ID for a genre."""
-        if not self.is_loaded:
-            return None
-        clusters = self.kb['genres']['clusters']
-        for cluster_id, genres in clusters.items():
-            if genre in genres:
-                return int(cluster_id)
-        return None
-    
-    def get_cluster_genres(self, cluster_id: int) -> List[str]:
-        """Get all genres in a cluster."""
-        if not self.is_loaded:
-            return []
-        return self.kb['genres']['clusters'].get(str(cluster_id), [])
-    
-    # ── ARTIST OPERATIONS ────────────────────────────────
+    # -- ARTIST OPERATIONS --
     
     def get_artist_profile(self, artist: str) -> Dict:
         """Get mood fingerprint for an artist."""
@@ -191,91 +151,117 @@ class KnowledgeService:
                     }
         return {}
     
-    def get_top_artists_for_mood(self, mood: str, top_n: int = 10) -> List[Dict]:
-        """Get top artists for a mood."""
-        if not self.is_loaded:
-            return []
-        return self.kb.get('artists', {}).get('top_per_mood', {}).get(mood, [])[:top_n]
+    # -- SONG PROFILE BUILDER --
     
-    # ── MOOD TRANSITIONS ─────────────────────────────────
-    
-    def get_next_mood(self, current_mood: str) -> Optional[str]:
-        """Get most likely next mood in a sequence."""
-        if not self.is_loaded:
-            return None
-        transitions = self.kb.get('transitions', {}).get('matrix', {})
-        if current_mood in transitions:
-            probs = transitions[current_mood]
-            if probs:
-                return max(probs, key=probs.get)
-        return None
-    
-    def get_mood_transitions(self, mood: str) -> Dict[str, float]:
-        """Get transition probabilities from a mood."""
-        if not self.is_loaded:
-            return {}
-        return self.kb.get('transitions', {}).get('matrix', {}).get(mood, {})
-    
-    # ── SONG PROFILE BUILDER ─────────────────────────────
-    
-    def build_song_profile(self, title: str, artist: str, genre: str,
-                          audio_features: Dict[str, float]) -> str:
-        """
-        Build a rich text profile for a song using knowledge base context.
-        This is used for RAG embeddings.
-        """
-        # Classify mood
-        mood, confidence, mood_probs = self.classify_mood_from_features(audio_features)
+    def build_song_profile(
+        self,
+        title: str,
+        artist: str,
+        genre: str,
+        audio_features: Optional[Dict[str, float]] = None,
+        **kwargs,
+    ) -> str:
+        """Build a rich text profile for a song using knowledge base context.
         
-        # Get genre context
-        genre_profile = self.get_genre_profile(genre)
-        similar_genres = self.get_similar_genres(genre, top_n=3)
+        Produces the canonical embedding-style profile:
+          "Track: 'X' by Y. Mood: M. Musical Feel: ..., Genre: G. ..."
         
-        # Get tempo zone
-        tempo = audio_features.get('tempo', 120)
-        if tempo < 80:
-            tempo_zone = 'slow'
-        elif tempo < 120:
-            tempo_zone = 'moderate'
-        elif tempo < 160:
-            tempo_zone = 'fast'
+        Accepts either an audio_features dict (backward compat) or individual
+        keyword arguments. Individual kwargs take precedence over audio_features.
+        
+        Supported kwargs:
+            mood, tempo, energy, danceability, valence, lyrics_sentiment
+        """
+        af = audio_features or {}
+
+        # -- resolve values: explicit kwarg > audio_features -----------------
+        energy = kwargs.get('energy', af.get('energy', 0.5))
+        valence = kwargs.get('valence', af.get('valence', 0.5))
+        tempo = kwargs.get('tempo', af.get('tempo', 120.0))
+        danceability = kwargs.get('danceability', af.get('danceability', 0.5))
+        lyrics_sentiment = kwargs.get('lyrics_sentiment', 0.0)
+
+        # -- mood: caller-supplied or KB-classified --------------------------
+        if 'mood' in kwargs:
+            mood = kwargs['mood']
+        elif af:
+            mood, _, _ = self.classify_mood_from_features(af)
         else:
-            tempo_zone = 'very fast'
-        
-        # Get energy/valence levels
-        energy = audio_features.get('energy', 0.5)
-        valence = audio_features.get('valence', 0.5)
-        
-        energy_level = 'high' if energy > 0.7 else 'medium' if energy > 0.4 else 'low'
-        valence_level = 'high' if valence > 0.7 else 'medium' if valence > 0.4 else 'low'
-        
-        # Build profile string
-        profile_parts = [
-            f"Title: {title}",
-            f"Artist: {artist}",
-            f"Genre: {genre}",
-            f"Mood: {mood} (confidence: {confidence:.2f})",
-            f"Tempo: {tempo_zone} ({tempo:.0f} BPM)",
-            f"Energy: {energy_level} ({energy:.2f})",
-            f"Valence: {valence_level} ({valence:.2f})",
+            mood = 'unknown'
+
+        # -- descriptive labels (embedding_service style) --------------------
+        energy_desc = (
+            "explosive high-energy powerful adrenaline"
+            if energy >= 0.7
+            else "calm acoustic gentle mellow quiet"
+            if energy <= 0.35
+            else "moderate steady groove"
+        )
+        valence_desc = (
+            "euphoric joyful upbeat bright"
+            if valence >= 0.65
+            else "melancholic sad dark sorrowful longing"
+            if valence <= 0.35
+            else "balanced neutral"
+        )
+        tempo_desc = (
+            f"fast pace {round(tempo)} BPM"
+            if tempo >= 125
+            else f"slow quiet {round(tempo)} BPM"
+            if tempo <= 95
+            else f"mid-tempo {round(tempo)} BPM"
+        )
+
+        # -- genre context ---------------------------------------------------
+        genre_context = ""
+        similar_genres_str = ""
+        if genre:
+            genre_profile = self.get_genre_profile(genre)
+            if genre_profile:
+                avg_energy = genre_profile.get("energy", 0.5)
+                avg_valence = genre_profile.get("valence", 0.5)
+                genre_context = f"Genre typical profile: energy {avg_energy:.2f}, valence {avg_valence:.2f}."
+
+            similar = self.get_similar_genres(genre, top_n=3)
+            if similar:
+                similar_genres_str = "Similar genres: " + ", ".join(
+                    f"{g} ({s:.2f})" for g, s in similar
+                )
+
+        # -- artist context --------------------------------------------------
+        artist_context = ""
+        artist_profile = self.get_artist_profile(artist)
+        if artist_profile:
+            artist_context = f"Artist known for {artist_profile.get('dominant_mood', 'unknown')} mood."
+
+        # -- key detection (from audio_features) -----------------------------
+        key_str = ""
+        if af:
+            key = af.get('key')
+            if key is not None:
+                key_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+                key_name = key_names[int(key)] if int(key) < len(key_names) else str(key)
+                mode = 'major' if af.get('mode', 1) == 1 else 'minor'
+                key_str = f"Key: {key_name} {mode}."
+
+        # -- assemble --------------------------------------------------------
+        parts = [
+            f"Track: '{title}' by {artist}. Mood: {mood}.",
+            f"Musical Feel: {energy_desc}, {valence_desc}, {tempo_desc}.",
+            f"Lyrical Sentiment: {round(lyrics_sentiment, 2)}",
         ]
-        
-        # Add key if available
-        key = audio_features.get('key')
-        if key is not None:
-            key_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-            key_name = key_names[int(key)] if int(key) < len(key_names) else str(key)
-            mode = 'major' if audio_features.get('mode', 1) == 1 else 'minor'
-            profile_parts.append(f"Key: {key_name} {mode}")
-        
-        # Add similar genres
-        if similar_genres:
-            sim_str = ', '.join([f"{g}({s:.2f})" for g, s in similar_genres])
-            profile_parts.append(f"Similar genres: {sim_str}")
-        
-        return ', '.join(profile_parts)
+        if genre:
+            parts.insert(2, f"Genre: {genre}. {genre_context}")
+        if similar_genres_str:
+            parts.append(similar_genres_str)
+        if artist_context:
+            parts.append(artist_context)
+        if key_str:
+            parts.append(key_str)
+
+        return " ".join(p for p in parts if p)
     
-    # ── KNOWLEDGE BASE STATS ─────────────────────────────
+    # -- KNOWLEDGE BASE STATS --
     
     def get_stats(self) -> Dict:
         """Get knowledge base statistics."""

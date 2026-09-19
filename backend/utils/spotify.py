@@ -80,20 +80,6 @@ def search_artist_discography(name: str, limit: int = 50) -> list[dict]:
     return output
 
 
-def verify_track_on_itunes(title: str, artist: str) -> dict | None:
-    """Verify a track exists on iTunes. Returns enriched metadata or None."""
-    results = search_itunes(f"{title} {artist}", entity="song", limit=1)
-    if not results:
-        return None
-    item = results[0]
-    return {
-        "title": item.get("trackName", title),
-        "artist": item.get("artistName", artist),
-        "album_art_url": item.get("artworkUrl100"),
-        "preview_url": item.get("previewUrl"),
-    }
-
-
 # ══════════════════════════════════════════════════════════════
 #  YouTube — via yt-dlp (replaces fragile HTML scraping)
 # ══════════════════════════════════════════════════════════════

@@ -8,12 +8,12 @@ from schemas import SongResponse, SpotifyImportRequest, SpotifySearchResult, iTu
 from utils.auth import get_current_user
 from utils.spotify import (
     parse_track_id, fetch_spotify_track_info, search_spotify_tracks,
-    search_artist_discography, find_youtube_video_id
+    search_artist_discography, find_youtube_video_id, search_itunes
 )
 from ml.lyrics_fetcher import fetch_lyrics
 from ml.sentiment import analyze_sentiment
 from ml.knowledge_service import knowledge_service
-from ml.embedding_service import get_text_embedding_tensor, build_song_profile_text
+from ml.embedding_service import get_text_embedding_tensor
 
 router = APIRouter(prefix="/api/songs", tags=["Songs"])
 
@@ -93,12 +93,16 @@ def import_spotify_song(
     mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features(audio_features)
 
     # 4. Generate 384d Dense Embedding Vector
-    profile_text = build_song_profile_text(
+    profile_text = knowledge_service.build_song_profile(
         title=track_info["title"],
         artist=track_info["artist"],
+        genre=track_info.get("genre", "pop"),
         mood=mood_label,
         tempo=track_info["tempo"],
-        energy=track_info["energy"]
+        energy=track_info["energy"],
+        danceability=track_info["danceability"],
+        valence=track_info["valence"],
+        lyrics_sentiment=sentiment_score,
     )
     embedding_vec = get_text_embedding_tensor(profile_text)
 
@@ -139,9 +143,6 @@ def import_itunes_song(
     db: Session = Depends(get_db)
 ):
     """Import a song from iTunes by title + artist search."""
-    from utils.spotify import search_itunes
-    import json
-
     # Search iTunes
     results = search_itunes(payload.title + " " + payload.artist, limit=1)
     if not results:
@@ -178,9 +179,16 @@ def import_itunes_song(
     mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features(audio_features)
 
     # Generate embedding
-    profile_text = build_song_profile_text(
-        title=title, artist=artist, mood=mood_label,
-        tempo=100.0, energy=0.5
+    profile_text = knowledge_service.build_song_profile(
+        title=title,
+        artist=artist,
+        genre=track.get("primaryGenreName", "pop"),
+        mood=mood_label,
+        tempo=100.0,
+        energy=0.5,
+        danceability=0.5,
+        valence=0.5,
+        lyrics_sentiment=0.0,
     )
     embedding_vec = get_text_embedding_tensor(profile_text)
 
@@ -241,7 +249,6 @@ def get_album_art(
     artist: str,
 ):
     """Fetch album art from iTunes on-demand."""
-    from utils.spotify import search_itunes
     query = f"{title} {artist}"
     results = search_itunes(query, entity="song", limit=1)
     if results and results[0].get("artworkUrl100"):
@@ -255,7 +262,6 @@ def get_preview_url(
     artist: str,
 ):
     """Fetch 30s preview URL from iTunes on-demand."""
-    from utils.spotify import search_itunes
     query = f"{title} {artist}"
     results = search_itunes(query, entity="song", limit=1)
     if results and results[0].get("previewUrl"):

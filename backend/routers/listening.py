@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from datetime import datetime
+import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -24,10 +25,9 @@ def record_listening_event(
     db: Session = Depends(get_db),
 ):
     """Record a play, skip, save, or unsave event."""
-    DEMO_USER_ID = 15
     song = db.query(Song).filter(
         Song.id == payload.song_id,
-        (Song.user_id == current_user.id) | (Song.user_id == DEMO_USER_ID),
+        Song.user_id == current_user.id,
     ).first()
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
@@ -43,6 +43,8 @@ def record_listening_event(
     if payload.event_type == "play":
         song.play_count += 1
         song.last_played_at = datetime.utcnow()
+        if payload.duration_listened > 0:
+            song.total_listen_sec += payload.duration_listened
     elif payload.event_type == "skip":
         song.skip_count += 1
         song.total_listen_sec += payload.duration_listened
@@ -86,20 +88,8 @@ def get_listening_history(
     )
     return events
 
-
-@router.post("/taste", response_model=TasteProfileResponse)
-def recompute_taste(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Force recompute the user's taste vector from their top-played songs."""
-    result = _recompute_taste_vector(current_user, db)
-    return result
-
-
 def _recompute_taste_vector(user: User, db: Session) -> TasteProfileResponse:
     """Average embeddings of top-played songs into a single taste vector."""
-    import json
 
     top_songs = (
         db.query(Song)

@@ -3,11 +3,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from ml.embedding_service import (
-    get_text_embedding_tensor,
     get_batch_embeddings_tensor,
     get_device,
     neural_cross_rerank,
-    build_song_profile_text
 )
 from ml.knowledge_service import knowledge_service
 from ml.faiss_service import faiss_service
@@ -15,9 +13,26 @@ from ml.query_planner import decompose_query, normalize_mood
 from rank_bm25 import BM25Okapi
 from config import settings
 import requests
-from typing import List, Dict, Optional, Tuple
+# typing imports removed - using built-in generics
 
 device = get_device()
+
+
+def _repair_json(raw: str) -> dict:
+    """Attempt to repair truncated JSON from Ollama responses."""
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        repaired = raw.rstrip()
+        if repaired.endswith('"'):
+            repaired += '}'
+        open_braces = repaired.count('{') - repaired.count('}')
+        open_brackets = repaired.count('[') - repaired.count(']')
+        repaired += ']' * open_brackets + '}' * open_braces
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            return {}
 
 
 def reciprocal_rank_fusion(
@@ -132,7 +147,6 @@ def hybrid_faiss_rag_search(
     5. 65/35 Score Fusion (0.65 * cross_prob + 0.35 * faiss_sim)
     """
     from models import Song
-    DEMO_USER_ID = 15
 
     if top_k is None:
         top_k = settings.TOP_K
@@ -167,7 +181,7 @@ def hybrid_faiss_rag_search(
     planner_mood = plan.get("mood") if plan else None
     query = db_session.query(Song).filter(Song.id.in_(candidate_ids))
     if user_id is not None:
-        query = query.filter((Song.user_id == user_id) | (Song.user_id == DEMO_USER_ID))
+        query = query.filter((Song.user_id == user_id) | (Song.user_id == settings.DEMO_USER_ID))
     if planner_mood:
         query = query.filter(Song.mood == planner_mood)
     candidate_songs = query.all()
@@ -176,7 +190,7 @@ def hybrid_faiss_rag_search(
     if not candidate_songs and planner_mood:
         query = db_session.query(Song).filter(Song.id.in_(candidate_ids))
         if user_id is not None:
-            query = query.filter((Song.user_id == user_id) | (Song.user_id == DEMO_USER_ID))
+            query = query.filter((Song.user_id == user_id) | (Song.user_id == settings.DEMO_USER_ID))
         candidate_songs = query.all()
 
     if not candidate_songs:
@@ -195,8 +209,9 @@ def hybrid_faiss_rag_search(
                 'danceability': s.danceability or 0.5,
                 'acousticness': getattr(s, 'acousticness', 0.0) or 0.0,
                 'instrumentalness': getattr(s, 'instrumentalness', 0.0) or 0.0,
-                'speechiness': getattr(s, 'speechiness', 0.0) or 0.0
-            }
+                'speechiness': getattr(s, 'speechiness', 0.0) or 0.0,
+            },
+            lyrics_sentiment=getattr(s, 'lyrics_sentiment', 0.0) or 0.0,
         )
         for s in candidate_songs
     ]
@@ -258,7 +273,17 @@ def pytorch_database_rag_search(
         if getattr(s, 'embedding', None):
             doc = f"Track: '{s.title}' by {s.artist}. Mood: {s.mood}. Tempo: {s.tempo} BPM. Energy: {s.energy}."
         else:
-            doc = build_song_profile_text(s.title, s.artist, s.mood or "chill", s.tempo or 120.0, s.energy or 0.5)
+            doc = knowledge_service.build_song_profile(
+                title=s.title,
+                artist=s.artist,
+                genre=getattr(s, 'genre', '') or '',
+                mood=s.mood or 'chill',
+                tempo=s.tempo or 120.0,
+                energy=s.energy or 0.5,
+                danceability=s.danceability or 0.5,
+                valence=s.valence or 0.5,
+                lyrics_sentiment=getattr(s, 'lyrics_sentiment', 0.0) or 0.0,
+            )
         lib_docs.append(doc)
 
     # Dense retrieval: bi-encoder cosine similarity
@@ -334,7 +359,17 @@ def pytorch_database_rag_search(
     # MMR diversity reranking
     candidate_songs = [s for _, s in candidates]
     candidate_docs = [
-        build_song_profile_text(s.title, s.artist, s.mood or "chill", s.tempo or 120.0, s.energy or 0.5)
+        knowledge_service.build_song_profile(
+            title=s.title,
+            artist=s.artist,
+            genre=getattr(s, 'genre', '') or '',
+            mood=s.mood or 'chill',
+            tempo=s.tempo or 120.0,
+            energy=s.energy or 0.5,
+            danceability=s.danceability or 0.5,
+            valence=s.valence or 0.5,
+            lyrics_sentiment=getattr(s, 'lyrics_sentiment', 0.0) or 0.0,
+        )
         for s in candidate_songs
     ]
     candidate_embeddings = get_batch_embeddings_tensor(candidate_docs)
@@ -410,21 +445,7 @@ Respond in JSON:
             )
             if resp.status_code == 200:
                 raw = resp.json().get("response", "{}")
-                try:
-                    curation = json.loads(raw)
-                except json.JSONDecodeError:
-                    repaired = raw.rstrip()
-                    if repaired.endswith('"'):
-                        repaired += '}'
-                    open_braces = repaired.count('{') - repaired.count('}')
-                    open_brackets = repaired.count('[') - repaired.count(']')
-                    repaired += ']' * open_brackets + '}' * open_braces
-                    try:
-                        curation = json.loads(repaired)
-                        print(f"[AI DJ] JSON repaired successfully (fallback)")
-                    except json.JSONDecodeError:
-                        print(f"[AI DJ] Could not repair JSON (fallback), using fallback")
-                        curation = {}
+                curation = _repair_json(raw)
                 return {
                     "playlist_title": curation.get("playlist_title", "Playlist: " + user_prompt),
                     "ai_dj_note": curation.get("ai_dj_note", ""),
@@ -507,22 +528,7 @@ Respond in JSON:
 
         if resp.status_code == 200:
             raw_response = resp.json().get("response", "{}")
-            try:
-                curation = json.loads(raw_response)
-            except json.JSONDecodeError:
-                # Repair truncated JSON by closing open brackets
-                repaired = raw_response.rstrip()
-                if repaired.endswith('"'):
-                    repaired += '}'
-                open_braces = repaired.count('{') - repaired.count('}')
-                open_brackets = repaired.count('[') - repaired.count(']')
-                repaired += ']' * open_brackets + '}' * open_braces
-                try:
-                    curation = json.loads(repaired)
-                    print(f"[AI DJ] JSON repaired successfully")
-                except json.JSONDecodeError:
-                    print(f"[AI DJ] Could not repair JSON, using fallback")
-                    curation = {}
+            curation = _repair_json(raw_response)
 
             result = {
                 "playlist_title": curation.get("playlist_title", "AI Curated Playlist"),

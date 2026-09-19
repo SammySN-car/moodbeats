@@ -62,7 +62,6 @@ class SongResponse(BaseModel):
     mood_confidence: Optional[float] = 0.0
     genre: Optional[str] = None
     lyrics_sentiment: Optional[float] = 0.0
-    similarity_score: Optional[float] = None
     # Feedback loop fields
     play_count: Optional[int] = 0
     skip_count: Optional[int] = 0
@@ -81,7 +80,7 @@ class SuggestedSong(BaseModel):
     preview_url: Optional[str] = None
     spotify_url: Optional[str] = None
     spotify_id: Optional[str] = None
-    neural_score: Optional[float] = None
+
 
 
 # --- Playlist Schemas ---

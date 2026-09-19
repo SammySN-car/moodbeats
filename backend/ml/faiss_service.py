@@ -57,15 +57,4 @@ class FAISSService:
                 results.append((self.song_ids[idx], float(score)))
         return results
 
-    def get_index_stats(self):
-        if not self.is_loaded:
-            return {'loaded': False}
-        return {
-            'loaded': True,
-            'total_vectors': self.index.ntotal,
-            'dimension': self.index.d,
-            'total_songs': len(self.song_ids),
-        }
-
-
 faiss_service = FAISSService()

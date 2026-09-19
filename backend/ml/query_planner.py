@@ -20,12 +20,10 @@ from config import settings
 # ----- Default plan when Ollama is unavailable -----
 DEFAULT_PLAN = {
     "hyde_description": "",
-    "expanded_queries": [],
     "mood": None,
     "tempo_range": [0, 200],
     "energy_range": [0.0, 1.0],
     "keywords": [],
-    "search_paths": ["semantic"]
 }
 
 # ----- Mood normalization map -----
@@ -164,12 +162,10 @@ User request: "{user_prompt}"
 Analyze the request and return a JSON object with these fields:
 {{
   "hyde_description": "A detailed 2-3 sentence description of an ideal track matching this vibe. Write it as if describing a real song - include mood, tempo feel, instrumentation, atmosphere. This will be used for semantic similarity search.",
-  "expanded_queries": ["query1", "query2", "query3"],
   "mood": "one of: euphoric, sad, energetic, chill, or null if unclear",
   "tempo_range": [min_bpm, max_bpm],
   "energy_range": [min_energy, max_energy],
-  "keywords": ["keyword1", "keyword2", "keyword3"],
-  "search_paths": ["list of: mood_filter, tempo_filter, energy_filter, semantic"]
+  "keywords": ["keyword1", "keyword2", "keyword3"]
 }}
 
 Rules for mood:
@@ -226,12 +222,10 @@ Respond in valid JSON ONLY."""
 
             validated_plan = {
                 "hyde_description": plan.get("hyde_description", ""),
-                "expanded_queries": plan.get("expanded_queries", []),
                 "mood": normalize_mood(plan.get("mood")),
                 "tempo_range": plan.get("tempo_range", [0, 200]),
                 "energy_range": plan.get("energy_range", [0.0, 1.0]),
                 "keywords": plan.get("keywords", []),
-                "search_paths": plan.get("search_paths", ["semantic"])
             }
 
             # Validate ranges
@@ -241,8 +235,6 @@ Respond in valid JSON ONLY."""
             er = validated_plan["energy_range"]
             if not isinstance(er, list) or len(er) != 2:
                 validated_plan["energy_range"] = [0.0, 1.0]
-            if not isinstance(validated_plan["expanded_queries"], list):
-                validated_plan["expanded_queries"] = []
             if not isinstance(validated_plan["keywords"], list):
                 validated_plan["keywords"] = []
 
@@ -277,12 +269,10 @@ Respond in valid JSON ONLY."""
                         plan2 = json.loads(raw2)
                         validated_plan = {
                             "hyde_description": plan2.get("hyde_description", validated_plan["hyde_description"]),
-                            "expanded_queries": plan2.get("expanded_queries", validated_plan["expanded_queries"]),
                             "mood": normalize_mood(plan2.get("mood")) or validated_plan["mood"],
                             "tempo_range": plan2.get("tempo_range", validated_plan["tempo_range"]),
                             "energy_range": plan2.get("energy_range", validated_plan["energy_range"]),
                             "keywords": plan2.get("keywords", validated_plan["keywords"]),
-                            "search_paths": plan2.get("search_paths", validated_plan["search_paths"])
                         }
                         print(f"[QueryPlanner] Retry succeeded, mood: {validated_plan['mood']}")
                 except Exception as e:
@@ -326,11 +316,6 @@ Respond in valid JSON ONLY."""
 
     fallback = dict(DEFAULT_PLAN)
     fallback["hyde_description"] = f"A track that matches the vibe: {user_prompt}"
-    fallback["expanded_queries"] = [
-        user_prompt,
-        f"{words[0]} music" if words else "music",
-        f"{words[0]} {words[-1]}" if len(words) > 1 else user_prompt
-    ]
     fallback["keywords"] = words[:5]
     fallback["mood"] = fallback_mood
 
