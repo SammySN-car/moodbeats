@@ -83,8 +83,10 @@ def test_import_with_mocked_spotify(test_client, test_user, auth_headers):
     data = response.json()
     assert data["playlist_name"] == "Test Playlist"
     assert data["total_tracks"] == 1
-    assert "matched_tracks" in data
-    assert "unmatched_tracks" in data
+    assert "imported_new" in data
+    assert "linked_existing" in data
+    assert "failed" in data
+    assert "failed_samples" in data
 
 
 def test_import_creates_playlist_in_db(test_client, test_user, auth_headers):
@@ -219,5 +221,6 @@ def test_import_matches_existing_songs(test_client, test_user, auth_headers, tes
 
     assert response.status_code == 200
     data = response.json()
-    assert data["matched_tracks"] == 1
-    assert data["unmatched_tracks"] == 0
+    assert data["linked_existing"] == 1
+    assert data["imported_new"] == 0
+    assert data["failed"] == 0

@@ -133,6 +133,18 @@ class KnowledgeService:
             return []
         similarity = self.kb['genres']['similarity'].get(genre, [])
         return similarity[:top_n]
+
+    def classify_genre_from_features(self, features: Dict[str, float]) -> str:
+        """Classify genre from audio features using the rule-based classifier.
+        
+        Dynamically imports scripts/genre_classifier.py to avoid moving the file.
+        """
+        import importlib.util
+        gc_path = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'genre_classifier.py')
+        spec = importlib.util.spec_from_file_location("genre_classifier", gc_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.classify_genre(features)
     
     # -- ARTIST OPERATIONS --
     

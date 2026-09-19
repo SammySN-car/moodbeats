@@ -64,32 +64,4 @@ def neural_cross_rerank(query: str, doc_texts: list[str]) -> list[float]:
         logits = model(**encoded).logits.squeeze(-1)
     return logits.cpu().tolist()
 
-def build_song_profile_text(
-    title: str,
-    artist: str,
-    mood: str,
-    tempo: float,
-    energy: float,
-    danceability: float = 0.5,
-    valence: float = 0.5,
-    lyrics_sentiment: float = 0.0,
-    genre: str = "",
-    audio_features: Optional[Dict[str, float]] = None,
-) -> str:
-    """Thin wrapper around knowledge_service.build_song_profile().
 
-    Preserves the original call-site signature for backward compatibility
-    while delegating to the single canonical profile builder.
-    """
-    return knowledge_service.build_song_profile(
-        title=title,
-        artist=artist,
-        genre=genre,
-        audio_features=audio_features,
-        mood=mood,
-        tempo=tempo,
-        energy=energy,
-        danceability=danceability,
-        valence=valence,
-        lyrics_sentiment=lyrics_sentiment,
-    )
