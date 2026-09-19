@@ -1,10 +1,17 @@
-<script setup>
-import { ref, onMounted } from 'vue'
+﻿<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import client from '../../../api/client'
 
+const router = useRouter()
 const playlists = ref([])
 const loading = ref(true)
 const error = ref('')
+const deleteError = ref('')
+
+const visiblePlaylists = computed(() => {
+  return playlists.value.filter(pl => (pl.items?.length || 0) > 0)
+})
 
 function formatRelativeTime(dateStr) {
   if (!dateStr) return ''
@@ -24,13 +31,29 @@ function formatRelativeTime(dateStr) {
 async function fetchPlaylists() {
   loading.value = true
   try {
-    const res = await client.get('/playlists', { params: { limit: 20 } })
+    const res = await client.get('/playlists', { params: { limit: 50 } })
     playlists.value = res.data
   } catch {
     error.value = 'Failed to load playlists'
   } finally {
     loading.value = false
   }
+}
+
+async function deletePlaylist(pl, e) {
+  e.stopPropagation()
+  if (!confirm(`Delete "${pl.name}"?`)) return
+  try {
+    await client.delete(`/playlists/${pl.id}`)
+    playlists.value = playlists.value.filter(p => p.id !== pl.id)
+  } catch {
+    deleteError.value = 'Failed to delete'
+    setTimeout(() => deleteError.value = '', 3000)
+  }
+}
+
+function openPlaylist(pl) {
+  router.push(`/playlists/${pl.id}`)
 }
 
 onMounted(fetchPlaylists)
@@ -42,9 +65,11 @@ onMounted(fetchPlaylists)
       <div>
         <p class="eyebrow">YOUR HISTORY</p>
         <h1>Playlists</h1>
-        <p>AI playlists you've generated.</p>
+        <p>Playlists you've generated or imported.</p>
       </div>
     </header>
+
+    <div v-if="deleteError" class="error-banner">{{ deleteError }}</div>
 
     <div v-if="loading" class="grid">
       <div v-for="n in 4" :key="n" class="skeleton-card">
@@ -56,7 +81,7 @@ onMounted(fetchPlaylists)
 
     <div v-else-if="error" class="error-banner">{{ error }}</div>
 
-    <div v-else-if="!playlists.length" class="empty">
+    <div v-else-if="!visiblePlaylists.length" class="empty">
       <div class="empty-icon">&#127925;</div>
       <h2>No playlists yet</h2>
       <p>Generate your first playlist on the Discover page.</p>
@@ -64,8 +89,16 @@ onMounted(fetchPlaylists)
     </div>
 
     <div v-else class="grid">
-      <article v-for="pl in playlists" :key="pl.id" class="playlist-card">
-        <h3>{{ pl.name }}</h3>
+      <article
+        v-for="pl in visiblePlaylists"
+        :key="pl.id"
+        class="playlist-card"
+        @click="openPlaylist(pl)"
+      >
+        <div class="card-top">
+          <h3>{{ pl.name }}</h3>
+          <button class="card-delete" @click="deletePlaylist(pl, $event)" title="Delete playlist">&times;</button>
+        </div>
         <p class="desc">"{{ pl.description }}"</p>
         <div class="meta">
           <span>{{ pl.items?.length || 0 }} tracks</span>
@@ -95,9 +128,15 @@ onMounted(fetchPlaylists)
 .empty p{margin:0 0 20px;color:#8e97a6;font-size:14px}
 .empty-btn{padding:10px 24px;border-radius:10px;background:#f5b942;color:#17191d;font-weight:700;font-size:13px;text-decoration:none;transition:.2s}
 .empty-btn:hover{background:#e5a932}
-.playlist-card{padding:22px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035);transition:.2s}
+.playlist-card{padding:22px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035);transition:.2s;cursor:pointer}
 .playlist-card:hover{border-color:rgba(245,185,66,.3);background:rgba(255,255,255,.05)}
-.playlist-card h3{margin:0 0 6px;font-size:17px;letter-spacing:-.02em}
+.card-top{display:flex;justify-content:space-between;align-items:start}
+.card-top h3{margin:0 0 6px;font-size:17px;letter-spacing:-.02em;flex:1;min-width:0}
+.card-delete{
+  background:none;border:none;color:#687180;font-size:20px;cursor:pointer;
+  padding:0 4px;line-height:1;transition:.2s;flex-shrink:0;
+}
+.card-delete:hover{color:#f87171}
 .desc{margin:0 0 12px;color:#8e97a6;font-size:13px;font-style:italic}
 .meta{display:flex;justify-content:space-between;color:#8e97a6;font-size:11px}
 .prompt{margin:12px 0 0;color:#687180;font-size:11px;font-style:italic}

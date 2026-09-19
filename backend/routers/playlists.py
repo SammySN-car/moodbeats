@@ -50,6 +50,23 @@ def list_playlists(
             continue
     return result
 
+@router.get("/{playlist_id}", response_model=PlaylistResponse)
+def get_playlist(
+    playlist_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a single playlist with all its tracks."""
+    pl = db.query(Playlist).filter(
+        Playlist.id == playlist_id,
+        Playlist.user_id == current_user.id
+    ).first()
+    if not pl:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    valid_items = [item for item in pl.items if item.song is not None]
+    pl.items = valid_items
+    return PlaylistResponse.model_validate(pl)
+
 @router.post("", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)
 def create_playlist(
     data: PlaylistCreate,

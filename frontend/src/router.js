@@ -15,6 +15,7 @@ const routes = [
       { path: 'import-spotify', name: 'SpotifyImport', component: () => import('./features/import/components/SpotifyPlaylistImport.vue') },
       { path: 'analytics', name: 'Analytics', component: () => import('./features/analytics/views/AnalyticsView.vue') },
       { path: 'playlists', name: 'Playlists', component: () => import('./features/discover/components/PlaylistHistory.vue') },
+      { path: 'playlists/:id', name: 'PlaylistDetail', component: () => import('./features/discover/components/PlaylistDetail.vue') },
     ]
   },
   {
