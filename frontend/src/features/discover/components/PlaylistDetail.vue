@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import client from '../../../api/client'
@@ -56,14 +56,14 @@ function playSong(song, index) {
   if (!song) return
   const tracks = playlist.value.items.map(i => i.song).filter(Boolean)
   setQueue(tracks, index)
-  playTrack(song, 'preview')
+  playTrack(song, 'full')
 }
 
 function playAll() {
   const tracks = playlist.value.items.map(i => i.song).filter(Boolean)
   if (tracks.length) {
     setQueue(tracks, 0)
-    playTrack(tracks[0], 'preview')
+    playTrack(tracks[0], 'full')
   }
 }
 
