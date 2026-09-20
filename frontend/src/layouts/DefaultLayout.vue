@@ -142,8 +142,7 @@ function navigate(path) {
 }
 
 const handleSeek = (val) => {
-  const fakeEvent = { currentTarget: { getBoundingClientRect: () => ({ left: 0, width: 1 }) }, clientX: val / 100 }
-  seek(fakeEvent)
+  seek(val)
 }
 </script>
 
@@ -260,7 +259,7 @@ const handleSeek = (val) => {
       @update:volume="setVolume"
       @toggle-mute="toggleMute"
       @close="closePlayer"
-      @toggle-mode="toggleMode"
+      @toggle-mode="(m) => toggleMode(m)"
     />
 
     <!-- Hidden YouTube player for full song mode -->

@@ -2,7 +2,7 @@
   <section v-if="track" class="player" aria-label="Now playing">
     <div class="player-inner">
       <div class="track-info">
-        <button class="art-button" type="button" aria-label="Open track details">
+        <button class="art-button" type="button" aria-label="Open track details" @click="$router.push(`/library/${track.id}`)">
           <img
             v-if="track.album_art_url || track.album_art || getAlbumArt(track)"
             :src="track.album_art_url || track.album_art || getAlbumArt(track)"
@@ -45,7 +45,7 @@
       </div>
 
       <div class="player-actions">
-        <button class="mode-toggle" type="button" @click="emit('toggle-mode')" :title="mode === 'preview' ? 'Switch to Full Song' : 'Switch to 30s Preview'">
+        <button class="mode-toggle" type="button" @click="emit('toggle-mode', mode === 'preview' ? 'full' : 'preview')" :title="mode === 'preview' ? 'Switch to Full Song' : 'Switch to 30s Preview'">
           <span v-if="mode === 'preview'">🎧 30s</span>
           <span v-else>🎵 Full</span>
         </button>
@@ -377,6 +377,12 @@ const formatTime = (seconds) => {
   }
 
   .player-actions {
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+
+  .volume-button,
+  .volume {
     display: none;
   }
 

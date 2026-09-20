@@ -211,7 +211,8 @@ export function usePlayer() {
 
   function toggleMode(newMode) {
     if (!playerState.currentTrack) return
-    playTrack(playerState.currentTrack, newMode)
+    const mode = newMode || (playerState.mode === 'preview' ? 'full' : 'preview')
+    playTrack(playerState.currentTrack, mode)
   }
 
   function togglePlay() {
@@ -234,10 +235,9 @@ export function usePlayer() {
     audio.volume = val
   }
 
-  function seek(e) {
+  function seek(percent) {
     if (playerState.mode !== 'preview') return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const pos = (e.clientX - rect.left) / rect.width
+    const pos = Math.max(0, Math.min(1, percent / 100))
     const newTime = pos * (audio.duration || 30)
     audio.currentTime = newTime
     playerState.currentTime = newTime

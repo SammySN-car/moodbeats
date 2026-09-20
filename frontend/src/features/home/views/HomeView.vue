@@ -51,11 +51,15 @@ async function loadHome() {
     recentlyPlayed.value = recentRes.data.map(h => h.song || h).slice(0, 8)
     fetchBatch(recentlyPlayed.value)
 
-    // Load recommendations
-    const recRes = await client.post('/playlists/generate', { prompt: 'upbeat happy vibes' })
-    if (recRes.data?.items) {
-      recommendations.value = recRes.data.items.slice(0, 4).map(i => i.song)
-      fetchBatch(recommendations.value)
+    // Load top songs as suggestions (no playlist generation on home load)
+    try {
+      const recRes = await client.get('/songs', { params: { limit: 4, mood: 'euphoric' } })
+      if (recRes.data?.songs) {
+        recommendations.value = recRes.data.songs.slice(0, 4)
+        fetchBatch(recommendations.value)
+      }
+    } catch {
+      // Silently ignore — recommendations are optional
     }
   } catch (e) {
     console.warn('Home load error:', e)

@@ -56,14 +56,14 @@ function playSong(song, index) {
   if (!song) return
   const tracks = playlist.value.items.map(i => i.song).filter(Boolean)
   setQueue(tracks, index)
-  playTrack(song, 'full')
+  playTrack(song, playerState.mode || 'preview')
 }
 
 function playAll() {
   const tracks = playlist.value.items.map(i => i.song).filter(Boolean)
   if (tracks.length) {
     setQueue(tracks, 0)
-    playTrack(tracks[0], 'full')
+    playTrack(tracks[0], playerState.mode || 'preview')
   }
 }
 

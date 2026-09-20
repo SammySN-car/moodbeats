@@ -258,7 +258,8 @@ onUnmounted(() => observer?.disconnect())
 .mini-art img{width:100%;height:100%;object-fit:cover}
 .badge{padding:5px 8px;border-radius:99px;background:rgba(245,185,66,.13);color:#f5b942;font-size:10px;font-weight:600}
 .row-actions{display:flex;justify-content:end;gap:5px;opacity:0}
-.song-row:hover .row-actions{opacity:1}
+.song-row:hover .row-actions,.song-row:focus-within .row-actions,.song-row:active .row-actions{opacity:1}
+@media(hover:none){.row-actions{opacity:.5}}
 .row-actions button{border:0;background:transparent;color:#687180;font-size:18px;cursor:pointer;transition:.15s}
 .row-actions button:hover,.row-actions button.active{color:#f5b942}
 .row-actions button.saved{color:#f5b942}

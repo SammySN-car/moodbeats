@@ -8,6 +8,7 @@ const loading = ref(true)
 const error = ref('')
 
 const moodColors = {
+  euphoric: '#fbbf24',
   happy: '#fbbf24',
   chill: '#67e8f9',
   energetic: '#f87171',
@@ -16,6 +17,7 @@ const moodColors = {
 }
 
 const moodLabels = {
+  euphoric: 'Euphoric',
   happy: 'Happy',
   chill: 'Chill',
   energetic: 'Energetic',

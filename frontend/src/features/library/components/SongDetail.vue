@@ -5,7 +5,7 @@ import client from '../../../api/client'
 import { usePlayer } from '../../../shared/composables/usePlayer'
 
 const route = useRoute()
-const { playTrack, toggleSave } = usePlayer()
+const { playTrack, toggleSave, setQueue } = usePlayer()
 
 const song = ref(null)
 const loading = ref(true)
@@ -97,8 +97,8 @@ onMounted(async () => {
           </div>
         </div>
         <div class="play-actions">
-          <button class="play-btn preview-btn" @click="playTrack(song, 'preview')">🎧 Preview</button>
-          <button class="play-btn full-btn" @click="playTrack(song, 'full')">🎵 Full Song</button>
+          <button class="play-btn preview-btn" @click="setQueue([song], 0); playTrack(song, 'preview')">🎧 Preview</button>
+          <button class="play-btn full-btn" @click="setQueue([song], 0); playTrack(song, 'full')">🎵 Full Song</button>
           <button class="play-btn save-btn" :class="{ saved: song.saved }" @click="handleSave">
             {{ song.saved ? '♥ Saved' : '♡ Save' }}
           </button>
