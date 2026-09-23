@@ -75,7 +75,7 @@ async function fetchSongs(reset = false) {
   }
 }
 
-// Filter by mood â€” reset and refetch
+// Filter by mood — reset and refetch
 watch(filter, () => fetchSongs(true))
 
 // Search is client-side on the loaded songs

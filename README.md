@@ -2,7 +2,7 @@
 
 AI-powered music discovery platform with a Retrieval-Augmented Generation (RAG) pipeline, neural reranking, and real-time audio feature extraction.
 
-> **License:** AGPL-3.0 â€” see [LICENSE](LICENSE)
+> **License:** AGPL-3.0 — see [LICENSE](LICENSE)
 
 ---
 
@@ -14,12 +14,12 @@ MoodBeats lets you describe any vibe, mood, or setting in natural language ("lat
 
 ```
 User Prompt
-  â†’ Bi-Encoder Dense Search (384d embeddings, cosine similarity)
-  â†’ BM25 Sparse Lexical Search (keyword matching)
-  â†’ Hybrid Convex Fusion (0.65 Dense + 0.35 Sparse)
-  â†’ Neural Cross-Encoder Reranking (ms-marco MiniLM)
-  â†’ Ollama AI DJ (sequencing + zero-shot recommendations)
-  â†’ iTunes Verification (album art + preview streams)
+  → Bi-Encoder Dense Search (384d embeddings, cosine similarity)
+  → BM25 Sparse Lexical Search (keyword matching)
+  → Hybrid Convex Fusion (0.65 Dense + 0.35 Sparse)
+  → Neural Cross-Encoder Reranking (ms-marco MiniLM)
+  → Ollama AI DJ (sequencing + zero-shot recommendations)
+  → iTunes Verification (album art + preview streams)
 ```
 
 ### Audio Feature Extraction
@@ -132,7 +132,7 @@ ollama pull llama3.2
 | POST | `/api/playlists` | Create manual playlist |
 | GET | `/api/playlists` | List playlists |
 | DELETE | /api/playlists/{id} | Delete playlist |
-| POST | /api/listening/event | Record play/skip/save |
+| POST | `/api/listening/event` | Record play/skip/save |
 | GET | /api/listening/history | Listening history |
 | POST | /api/listening/taste | Recompute taste vector |
 | GET | `/api/analytics/mood-distribution` | Mood breakdown |
@@ -142,6 +142,6 @@ ollama pull llama3.2
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0** â€” see [LICENSE](LICENSE) for details.
+This project is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE) for details.
 
 You may use, modify, and distribute this software under the AGPL-3.0 terms. If you modify and run this software as a network service, you must provide the source code of your modified version to all users of that service.
