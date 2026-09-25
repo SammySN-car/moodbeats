@@ -1,7 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Integer, String, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
+
+
+def utcnow() -> datetime:
+    """Naive UTC timestamp (DB DateTime columns are timezone-naive)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class User(Base):
@@ -11,7 +16,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     # Taste profile: 384-dim vector stored as JSON string, recomputed periodically
     taste_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -60,7 +65,7 @@ class Song(Base):
 
     # 384-dimensional dense vector stored as JSON string for instant search
     embedding: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     # Feedback Loop: implicit signal aggregates (updated by ListeningEvent)
     play_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -79,7 +84,7 @@ class ListeningEvent(Base):
     song_id: Mapped[int] = mapped_column(ForeignKey("songs.id", ondelete="CASCADE"), nullable=False)
     event_type: Mapped[str] = mapped_column(String(20), nullable=False)  # play, skip, save, unsave
     duration_listened: Mapped[float] = mapped_column(Float, default=0.0)  # seconds
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     # Relationship to song (for history serialization)
     song: Mapped["Song"] = relationship("Song")
@@ -97,7 +102,7 @@ class Playlist(Base):
     source_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     is_auto: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     items: Mapped[list["PlaylistItem"]] = relationship(
         "PlaylistItem", backref="playlist", cascade="all, delete-orphan", order_by="PlaylistItem.position"

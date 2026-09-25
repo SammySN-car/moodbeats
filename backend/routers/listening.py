@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -42,7 +42,7 @@ def record_listening_event(
 
     if payload.event_type == "play":
         song.play_count += 1
-        song.last_played_at = datetime.utcnow()
+        song.last_played_at = datetime.now(timezone.utc).replace(tzinfo=None)
         if payload.duration_listened > 0:
             song.total_listen_sec += payload.duration_listened
     elif payload.event_type == "skip":
@@ -131,7 +131,7 @@ def _recompute_taste_vector(user: User, db: Session) -> TasteProfileResponse:
 
     taste = np.mean(vectors, axis=0).tolist()
     user.taste_vector = json.dumps(taste)
-    user.taste_updated_at = datetime.utcnow()
+    user.taste_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
 
     print(f"[TasteProfile] Recomputed for user {user.id}: {len(vectors)} songs averaged")
