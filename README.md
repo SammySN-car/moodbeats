@@ -140,6 +140,31 @@ ollama pull llama3.2
 
 ---
 
+## Testing
+
+```bash
+# Backend (38 tests)
+cd backend
+python -m pytest tests/ -q
+
+# Frontend (20 tests)
+cd frontend
+npm run test
+```
+
+**Current status: 58/58 passing**
+
+## Key Features
+
+- **RAG Playlist Generation** — Hybrid dense (FAISS, 89K vectors) + sparse (BM25) retrieval with cross-encoder reranking over a 114K-track knowledge base
+- **Playlist Detail Pages** — Browse, play, and delete playlists with full track lists (`/playlists/:id`)
+- **Dual-Stream Playback** — 30s iTunes previews or full YouTube tracks, toggleable in the bottom player
+- **Spotify Import** — Paste a Spotify URL; audio features are extracted and the song is added to your library
+- **Feedback Loop** — Play/skip/save events feed a per-user taste vector that biases future recommendations
+- **Mood & Genre Classification** — Rule-based classifiers over librosa audio features + DistilBERT lyrics sentiment
+
+---
+
 ## License
 
 This project is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE) for details.
