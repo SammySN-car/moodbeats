@@ -1,18 +1,19 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from database import get_db
 from models import Song, User
 from utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
+
 @router.get("/mood-distribution")
 def get_mood_distribution(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    results = db.query(Song.mood, func.count(Song.id)).filter(
-        Song.user_id == current_user.id
-    ).group_by(Song.mood).all()
+    results = db.query(Song.mood, func.count(Song.id)).filter(Song.user_id == current_user.id).group_by(Song.mood).all()
     return {mood: count for mood, count in results if mood}
+
 
 @router.get("/stats")
 def get_library_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -23,5 +24,5 @@ def get_library_stats(current_user: User = Depends(get_current_user), db: Sessio
     return {
         "total_songs": total_songs,
         "avg_tempo_bpm": round(float(avg_tempo), 1),
-        "avg_energy_pct": round(float(avg_energy) * 100, 1)
+        "avg_energy_pct": round(float(avg_energy) * 100, 1),
     }

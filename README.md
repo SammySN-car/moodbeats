@@ -131,6 +131,7 @@ ollama pull llama3.2
 | POST | `/api/playlists/generate` | AI mood playlist |
 | POST | `/api/playlists` | Create manual playlist |
 | GET | `/api/playlists` | List playlists |
+| GET | `/api/playlists/{id}` | Playlist detail with tracks |
 | DELETE | /api/playlists/{id} | Delete playlist |
 | POST | `/api/listening/event` | Record play/skip/save |
 | GET | /api/listening/history | Listening history |

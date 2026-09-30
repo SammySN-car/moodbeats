@@ -32,26 +32,44 @@ Usage:
 
 OUTPUT_GENRES = [
     # Electronic
-    'house', 'techno', 'edm', 'dnb', 'dubstep', 'trance',
-    'synthwave', 'phonk', 'lofi',
+    "house",
+    "techno",
+    "edm",
+    "dnb",
+    "dubstep",
+    "trance",
+    "synthwave",
+    "phonk",
+    "lofi",
     # Hip-Hop / Rap
-    'hip_hop', 'rap', 'rnb',
+    "hip_hop",
+    "rap",
+    "rnb",
     # Rock
-    'rock', 'metal', 'punk', 'indie',
+    "rock",
+    "metal",
+    "punk",
+    "indie",
     # Pop
-    'pop', 'kpop', 'latin',
+    "pop",
+    "kpop",
+    "latin",
     # Jazz / Blues
-    'jazz', 'blues',
+    "jazz",
+    "blues",
     # Classical / Instrumental
-    'classical', 'ambient',
+    "classical",
+    "ambient",
     # R&B / Soul
-    'soul', 'funk',
+    "soul",
+    "funk",
     # Reggae
-    'reggae',
+    "reggae",
     # Country / Folk
-    'country', 'folk',
+    "country",
+    "folk",
     # Fallback
-    'alternative',
+    "alternative",
 ]
 
 # -------------------------------------------------------------
@@ -61,129 +79,129 @@ OUTPUT_GENRES = [
 
 KAGGLE_TO_OUTPUT_GENRE = {
     # Electronic
-    'house': 'house',
-    'chicago-house': 'house',
-    'deep-house': 'house',
-    'progressive-house': 'house',
-    'techno': 'techno',
-    'detroit-techno': 'techno',
-    'minimal-techno': 'techno',
-    'edm': 'edm',
-    'drum-and-bass': 'dnb',
-    'dubstep': 'dubstep',
-    'trance': 'trance',
-    'synth-pop': 'synthwave',
-    'electronic': 'edm',
-    'electro': 'edm',
-    'breakbeat': 'edm',
-    'idm': 'synthwave',
-    'industrial': 'techno',
-    'hardstyle': 'edm',
-    'garage': 'house',
-    'disco': 'house',
-    'dance': 'house',
-    'club': 'house',
-    'party': 'house',
-    'happy': 'pop',
+    "house": "house",
+    "chicago-house": "house",
+    "deep-house": "house",
+    "progressive-house": "house",
+    "techno": "techno",
+    "detroit-techno": "techno",
+    "minimal-techno": "techno",
+    "edm": "edm",
+    "drum-and-bass": "dnb",
+    "dubstep": "dubstep",
+    "trance": "trance",
+    "synth-pop": "synthwave",
+    "electronic": "edm",
+    "electro": "edm",
+    "breakbeat": "edm",
+    "idm": "synthwave",
+    "industrial": "techno",
+    "hardstyle": "edm",
+    "garage": "house",
+    "disco": "house",
+    "dance": "house",
+    "club": "house",
+    "party": "house",
+    "happy": "pop",
     # Hip-Hop / Rap
-    'hip-hop': 'hip_hop',
-    'rap': 'hip_hop',
-    'r-n-b': 'rnb',
-    'soul': 'soul',
-    'funk': 'funk',
+    "hip-hop": "hip_hop",
+    "rap": "hip_hop",
+    "r-n-b": "rnb",
+    "soul": "soul",
+    "funk": "funk",
     # Rock
-    'rock': 'rock',
-    'alt-rock': 'rock',
-    'alternative': 'alternative',
-    'hard-rock': 'metal',
-    'heavy-metal': 'metal',
-    'metal': 'metal',
-    'metalcore': 'metal',
-    'death-metal': 'metal',
-    'black-metal': 'metal',
-    'grindcore': 'metal',
-    'punk': 'punk',
-    'punk-rock': 'punk',
-    'grunge': 'rock',
-    'emo': 'rock',
-    'goth': 'rock',
-    'indie': 'indie',
-    'indie-pop': 'indie',
-    'power-pop': 'indie',
-    'psych-rock': 'indie',
-    'rock-n-roll': 'rock',
-    'rockabilly': 'rock',
-    'ska': 'punk',
-    'guitar': 'rock',
+    "rock": "rock",
+    "alt-rock": "rock",
+    "alternative": "alternative",
+    "hard-rock": "metal",
+    "heavy-metal": "metal",
+    "metal": "metal",
+    "metalcore": "metal",
+    "death-metal": "metal",
+    "black-metal": "metal",
+    "grindcore": "metal",
+    "punk": "punk",
+    "punk-rock": "punk",
+    "grunge": "rock",
+    "emo": "rock",
+    "goth": "rock",
+    "indie": "indie",
+    "indie-pop": "indie",
+    "power-pop": "indie",
+    "psych-rock": "indie",
+    "rock-n-roll": "rock",
+    "rockabilly": "rock",
+    "ska": "punk",
+    "guitar": "rock",
     # Pop
-    'pop': 'pop',
-    'pop-film': 'pop',
-    'k-pop': 'kpop',
-    'cantopop': 'kpop',
-    'mandopop': 'kpop',
-    'j-pop': 'pop',
-    'j-idol': 'pop',
-    'j-dance': 'pop',
-    'latin': 'latin',
-    'latino': 'latin',
-    'reggaeton': 'latin',
-    'salsa': 'latin',
-    'samba': 'latin',
-    'forro': 'latin',
-    'pagode': 'latin',
-    'sertanejo': 'latin',
-    'brazil': 'latin',
-    'mpb': 'latin',
-    'tango': 'latin',
-    'spanish': 'latin',
-    'french': 'pop',
-    'german': 'pop',
-    'swedish': 'pop',
-    'british': 'pop',
-    'turkish': 'latin',
-    'iranian': 'pop',
-    'indian': 'pop',
-    'malay': 'pop',
-    'arabic': 'pop',
+    "pop": "pop",
+    "pop-film": "pop",
+    "k-pop": "kpop",
+    "cantopop": "kpop",
+    "mandopop": "kpop",
+    "j-pop": "pop",
+    "j-idol": "pop",
+    "j-dance": "pop",
+    "latin": "latin",
+    "latino": "latin",
+    "reggaeton": "latin",
+    "salsa": "latin",
+    "samba": "latin",
+    "forro": "latin",
+    "pagode": "latin",
+    "sertanejo": "latin",
+    "brazil": "latin",
+    "mpb": "latin",
+    "tango": "latin",
+    "spanish": "latin",
+    "french": "pop",
+    "german": "pop",
+    "swedish": "pop",
+    "british": "pop",
+    "turkish": "latin",
+    "iranian": "pop",
+    "indian": "pop",
+    "malay": "pop",
+    "arabic": "pop",
     # Jazz / Blues
-    'jazz': 'jazz',
-    'blues': 'blues',
+    "jazz": "jazz",
+    "blues": "blues",
     # Classical / Instrumental
-    'classical': 'classical',
-    'opera': 'classical',
-    'piano': 'classical',
-    'new-age': 'ambient',
-    'ambient': 'ambient',
-    'sleep': 'ambient',
+    "classical": "classical",
+    "opera": "classical",
+    "piano": "classical",
+    "new-age": "ambient",
+    "ambient": "ambient",
+    "sleep": "ambient",
     # Country / Folk
-    'country': 'country',
-    'honky-tonk': 'country',
-    'bluegrass': 'country',
-    'folk': 'folk',
-    'singer-songwriter': 'folk',
-    'songwriter': 'folk',
+    "country": "country",
+    "honky-tonk": "country",
+    "bluegrass": "country",
+    "folk": "folk",
+    "singer-songwriter": "folk",
+    "songwriter": "folk",
     # Reggae / Caribbean
-    'reggae': 'reggae',
-    'dub': 'reggae',
-    'dancehall': 'reggae',
+    "reggae": "reggae",
+    "dub": "reggae",
+    "dancehall": "reggae",
     # Electronic subgenres
-    'afrobeat': 'funk',
-    'groove': 'funk',
-    'gospel': 'soul',
+    "afrobeat": "funk",
+    "groove": "funk",
+    "gospel": "soul",
     # Regional / Mood (map to closest musical genre)
-    'anime': 'pop',
-    'children': 'pop',
-    'kids': 'pop',
-    'disney': 'pop',
-    'comedy': 'pop',
-    'show-tunes': 'pop',
-    'romance': 'rnb',
-    'sad': 'indie',
-    'chill': 'lofi',
-    'study': 'lofi',
-    'world-music': 'folk',
-    'j-rock': 'rock',
-    'acoustic': 'folk',
+    "anime": "pop",
+    "children": "pop",
+    "kids": "pop",
+    "disney": "pop",
+    "comedy": "pop",
+    "show-tunes": "pop",
+    "romance": "rnb",
+    "sad": "indie",
+    "chill": "lofi",
+    "study": "lofi",
+    "world-music": "folk",
+    "j-rock": "rock",
+    "acoustic": "folk",
 }
 
 # -------------------------------------------------------------
@@ -192,33 +210,28 @@ KAGGLE_TO_OUTPUT_GENRE = {
 
 THRESHOLDS = {
     # Instrumental branch
-    'instrumentalness_high': 0.7,
-    'instrumentalness_mid': 0.3,
-
+    "instrumentalness_high": 0.7,
+    "instrumentalness_mid": 0.3,
     # Speech branch
-    'speechiness_high': 0.2,
-    'speechiness_mid': 0.15,
-
+    "speechiness_high": 0.2,
+    "speechiness_mid": 0.15,
     # Acoustic branch
-    'acousticness_high': 0.5,
-
+    "acousticness_high": 0.5,
     # Energy tiers
-    'energy_high': 0.7,
-    'energy_mid': 0.4,
-
+    "energy_high": 0.7,
+    "energy_mid": 0.4,
     # Tempo boundaries (BPM)
-    'tempo_dnb': 160,
-    'tempo_punk': 140,
-    'tempo_techno': 120,
-    'tempo_lofi': 85,
-
+    "tempo_dnb": 160,
+    "tempo_punk": 140,
+    "tempo_techno": 120,
+    "tempo_lofi": 85,
     # Sub-classifiers
-    'danceability_high': 0.7,
-    'danceability_mid': 0.65,
-    'valence_high': 0.55,
-    'valence_dark': 0.35,
-    'valence_low': 0.3,
-    'loudness_high': -5.0,
+    "danceability_high": 0.7,
+    "danceability_mid": 0.65,
+    "valence_high": 0.55,
+    "valence_dark": 0.35,
+    "valence_low": 0.3,
+    "loudness_high": -5.0,
 }
 
 
@@ -226,7 +239,8 @@ THRESHOLDS = {
 # CORE CLASSIFIER — RULE-BASED
 # -------------------------------------------------------------
 
-def classify_genre(features: dict, thresholds: dict = None) -> str:
+
+def classify_genre(features: dict, thresholds: dict | None = None) -> str:
     """
     Classify a song into a genre using audio features only (rule-based).
 
@@ -248,139 +262,140 @@ def classify_genre(features: dict, thresholds: dict = None) -> str:
     """
     t = thresholds or THRESHOLDS
 
-    tempo = float(features.get('tempo', 120))
-    energy = float(features.get('energy', 0.5))
-    danceability = float(features.get('danceability', 0.5))
-    valence = float(features.get('valence', 0.5))
-    acousticness = float(features.get('acousticness', 0.3))
-    instrumentalness = float(features.get('instrumentalness', 0.0))
-    speechiness = float(features.get('speechiness', 0.05))
+    tempo = float(features.get("tempo", 120))
+    energy = float(features.get("energy", 0.5))
+    danceability = float(features.get("danceability", 0.5))
+    valence = float(features.get("valence", 0.5))
+    acousticness = float(features.get("acousticness", 0.3))
+    instrumentalness = float(features.get("instrumentalness", 0.0))
+    speechiness = float(features.get("speechiness", 0.05))
 
     # -- Step 1: High instrumentalness → Classical / Ambient --
-    if instrumentalness > t['instrumentalness_high']:
+    if instrumentalness > t["instrumentalness_high"]:
         if energy < 0.3 and tempo < 80:
-            return 'ambient'
+            return "ambient"
         if tempo < 90 and acousticness > 0.3:
-            return 'classical'
+            return "classical"
         if valence > 0.5:
-            return 'classical'
-        return 'classical'
+            return "classical"
+        return "classical"
 
     # -- Step 2: High speechiness → Hip-Hop / Rap / R&B --
-    if speechiness > t['speechiness_high']:
-        if energy > t['energy_high']:
-            return 'rap'
+    if speechiness > t["speechiness_high"]:
+        if energy > t["energy_high"]:
+            return "rap"
         if tempo > 115:
-            return 'rap'
-        if valence > t['valence_high'] and danceability > t['danceability_mid']:
-            return 'hip_hop'
-        if danceability > t['danceability_mid'] and tempo < 100:
-            return 'rnb'
-        return 'hip_hop'
+            return "rap"
+        if valence > t["valence_high"] and danceability > t["danceability_mid"]:
+            return "hip_hop"
+        if danceability > t["danceability_mid"] and tempo < 100:
+            return "rnb"
+        return "hip_hop"
 
     # -- Step 3: High acousticness → Folk / Country / Blues / Jazz --
-    if acousticness > t['acousticness_high']:
+    if acousticness > t["acousticness_high"]:
         if energy < 0.35:
             if valence < 0.35:
-                return 'blues'
+                return "blues"
             if tempo > 70 and tempo < 110:
-                return 'country'
-            return 'folk'
+                return "country"
+            return "folk"
         if instrumentalness > 0.1 and energy < 0.5:
-            return 'jazz'
+            return "jazz"
         if tempo < 110:
             if energy < 0.4:
-                return 'blues'
-            return 'country'
-        return 'folk'
+                return "blues"
+            return "country"
+        return "folk"
 
     # -- Step 4: High energy ( > 0.7) --
-    if energy > t['energy_high']:
+    if energy > t["energy_high"]:
         # Very fast → DnB
-        if tempo > t['tempo_dnb']:
-            return 'dnb'
+        if tempo > t["tempo_dnb"]:
+            return "dnb"
 
         # Fast territory (tempo > 140): metal vs punk vs electronic
-        if tempo > t['tempo_punk']:
+        if tempo > t["tempo_punk"]:
             # Dark + fast + loud = metal (FIXED: was falling to punk/techno)
-            if valence < t['valence_dark']:
-                return 'metal'
+            if valence < t["valence_dark"]:
+                return "metal"
             # High danceability + fast = punk
-            if danceability > t['danceability_mid']:
-                return 'punk'
-            return 'punk'
+            if danceability > t["danceability_mid"]:
+                return "punk"
+            return "punk"
 
         # High energy + high dance → electronic dance genres
-        if danceability > t['danceability_high']:
+        if danceability > t["danceability_high"]:
             if valence > 0.5:
-                return 'edm'
-            return 'house'
+                return "edm"
+            return "house"
 
         # Medium-fast electronic
-        if tempo > t['tempo_techno']:
+        if tempo > t["tempo_techno"]:
             if valence > 0.5:
-                return 'trance'
-            return 'techno'
+                return "trance"
+            return "techno"
 
         # Moderate tempo, high energy
-        if valence < t['valence_low']:
+        if valence < t["valence_low"]:
             # Dark + loud + mid-tempo → metal (NOT techno)
-            return 'metal'
-        if instrumentalness > t['instrumentalness_mid']:
-            return 'dubstep'
+            return "metal"
+        if instrumentalness > t["instrumentalness_mid"]:
+            return "dubstep"
         if danceability > 0.55 and valence > 0.4:
-            return 'edm'
+            return "edm"
 
-        return 'rock'
+        return "rock"
 
     # -- Step 5: Medium energy (0.4 - 0.7) --
-    if energy > t['energy_mid']:
+    if energy > t["energy_mid"]:
         # Speech check in mid-energy for borderline hip-hop
-        if speechiness > t['speechiness_mid']:
-            if tempo < 100 and danceability > t['danceability_mid']:
-                return 'hip_hop'
-            return 'rap'
+        if speechiness > t["speechiness_mid"]:
+            if tempo < 100 and danceability > t["danceability_mid"]:
+                return "hip_hop"
+            return "rap"
 
         # Happy + danceable = pop
-        if danceability > t['danceability_mid'] and valence > t['valence_high']:
-            return 'pop'
+        if danceability > t["danceability_mid"] and valence > t["valence_high"]:
+            return "pop"
 
         # Danceable but not happy = funk/soul
-        if danceability > t['danceability_mid']:
+        if danceability > t["danceability_mid"]:
             if valence > 0.4:
-                return 'funk'
-            return 'soul'
+                return "funk"
+            return "soul"
 
         # Slow mid-energy → lofi
-        if tempo < t['tempo_lofi']:
-            return 'lofi'
+        if tempo < t["tempo_lofi"]:
+            return "lofi"
 
         # Mid-tempo, not very danceable
-        if valence > t['valence_high']:
-            return 'pop'
+        if valence > t["valence_high"]:
+            return "pop"
 
-        return 'indie'
+        return "indie"
 
     # -- Step 6: Low energy ( < 0.4 ) --
     if acousticness > 0.6:
-        return 'folk'
-    if instrumentalness > t['instrumentalness_mid']:
-        return 'ambient'
-    if tempo < t['tempo_lofi']:
-        return 'lofi'
-    if valence > t['valence_high']:
-        return 'soul'
-    if speechiness > t['speechiness_mid']:
-        return 'hip_hop'
+        return "folk"
+    if instrumentalness > t["instrumentalness_mid"]:
+        return "ambient"
+    if tempo < t["tempo_lofi"]:
+        return "lofi"
+    if valence > t["valence_high"]:
+        return "soul"
+    if speechiness > t["speechiness_mid"]:
+        return "hip_hop"
 
-    return 'lofi'
+    return "lofi"
 
 
 # -------------------------------------------------------------
 # PRODUCTION CLASSIFIER — DUAL MODE
 # -------------------------------------------------------------
 
-def classify_song(features: dict, kaggle_genre: str = None) -> str:
+
+def classify_song(features: dict, kaggle_genre: str | None = None) -> str:
     """
     Production classifier with two modes.
 

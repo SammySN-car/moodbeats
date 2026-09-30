@@ -1,21 +1,25 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import engine, Base
-from routers import auth, songs, playlists, analytics, listening
+
+from database import Base, engine
 from ml.embedding_service import get_bi_encoder, get_cross_encoder
 from ml.sentiment import get_sentiment_pipeline
+from routers import analytics, auth, listening, playlists, songs
+
 
 # Lifespan: Pre-warm PyTorch Neural Models into RAM on server startup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Pre-warming PyTorch Neural Models into RAM...")
-    get_bi_encoder()         # Pre-loads all-MiniLM-L6-v2
-    get_cross_encoder()      # Pre-loads ms-marco Cross-Encoder
-    get_sentiment_pipeline() # Pre-loads DistilBERT
+    get_bi_encoder()  # Pre-loads all-MiniLM-L6-v2
+    get_cross_encoder()  # Pre-loads ms-marco Cross-Encoder
+    get_sentiment_pipeline()  # Pre-loads DistilBERT
     Base.metadata.create_all(bind=engine)
     print("MoodBeats PyTorch RAG API is ready!")
     yield
+
 
 app = FastAPI(title="MoodBeats API", version="6.0.0", lifespan=lifespan)
 
@@ -34,6 +38,7 @@ app.include_router(songs.router)
 app.include_router(playlists.router)
 app.include_router(analytics.router)
 app.include_router(listening.router)
+
 
 @app.get("/")
 def root():

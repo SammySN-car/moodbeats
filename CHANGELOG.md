@@ -135,6 +135,18 @@
 
 ## ✅ DONE
 
+### 2026-09-30 — Docs Refresh, Encoding & Deprecation Fixes
+- Fixed mojibake encoding (`â€`/`â†`/`ðŸ`) across README.md, CHANGELOG.md, SongLibrary.vue — full-repo scan confirms all source files clean
+- Replaced deprecated `datetime.utcnow()` with `datetime.now(timezone.utc).replace(tzinfo=None)` in models.py, auth.py, listening.py (pytest warnings 104 → 1)
+- Fixed 11 UI/UX bugs from sandbox audit (seek percent, VITE_API_URL, mode toggle end-to-end, album-art nav, HomeView recommendations, euphoric mood, touch row actions, small-screen player)
+- Full-song playback: playlists respect preview/full toggle (default full via YouTube)
+- Playlist detail page: `GET /api/playlists/{id}`, `/playlists/:id` route, track list + Play All + Delete; empty playlists hidden from history
+- Restored Spotify import song creation (`_upsert_song_from_spotify`) + manual playlist CRUD endpoints
+- Installed 5 OpenCode skills: code-review, diagnosing-bugs, implement, fastapi-python, web-design-guidelines
+- Refreshed MOODBEATS_AI_CONTEXT.md (v6.1), ARCHITECTURE_FLOW_AND_AUDIT.md status banner, USER_FLOW.md playlist flow
+- Tests: 58/58 passing (38 pytest + 20 vitest), ruff check clean
+
+
 ### 2026-09-01 -- Feedback Loop and User Taste Profile
 
 Backend:

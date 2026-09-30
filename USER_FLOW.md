@@ -42,3 +42,12 @@
 - Floating pill tab bar (Discover | Library | Search | Analytics)
 - Bottom player (appears when track playing)
 - Page transitions with fade animations
+
+## Flow 6: Manage Playlists
+1. Discover tab → Playlist History section (playlists with 0 tracks are hidden)
+2. Click a playlist card → Playlist Detail page (`/playlists/:id`)
+3. See track list with album art, per-track duration, total runtime
+4. Click a track or "Play All" → plays in current mode (30s preview / full)
+5. Mode toggle in bottom player switches playback for next track
+6. X button on history card, or "Delete Playlist" on detail page → removes playlist
+7. Back arrow → returns to Discover

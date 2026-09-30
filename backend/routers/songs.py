@@ -1,69 +1,64 @@
 import json
-from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+
 from database import get_db
+from ml.embedding_service import get_text_embedding_tensor
+from ml.knowledge_service import knowledge_service
+from ml.lyrics_fetcher import fetch_lyrics
+from ml.sentiment import analyze_sentiment
 from models import Song, User
 from schemas import SongResponse, SpotifyImportRequest, SpotifySearchResult, iTunesImportRequest
 from utils.auth import get_current_user
 from utils.spotify import (
-    parse_track_id, fetch_spotify_track_info, search_spotify_tracks,
-    search_artist_discography, find_youtube_video_id, search_itunes
+    fetch_spotify_track_info,
+    find_youtube_video_id,
+    parse_track_id,
+    search_artist_discography,
+    search_itunes,
+    search_spotify_tracks,
 )
-from ml.lyrics_fetcher import fetch_lyrics
-from ml.sentiment import analyze_sentiment
-from ml.knowledge_service import knowledge_service
-from ml.embedding_service import get_text_embedding_tensor
 
 router = APIRouter(prefix="/api/songs", tags=["Songs"])
 
 
 @router.get("/youtube-id")
-def get_youtube_id(title: str, artist: Optional[str] = "", current_user: User = Depends(get_current_user)):
+def get_youtube_id(title: str, artist: str | None = "", current_user: User = Depends(get_current_user)):
     """Find official audio on YouTube via yt-dlp."""
     vid = find_youtube_video_id(artist or "", title)
     return {"video_id": vid}
 
 
-@router.get("/search", response_model=List[SpotifySearchResult])
-def search_tracks(
-    q: str,
-    limit: int = Query(default=10, ge=1, le=50),
-    current_user: User = Depends(get_current_user)
-):
+@router.get("/search", response_model=list[SpotifySearchResult])
+def search_tracks(q: str, limit: int = Query(default=10, ge=1, le=50), current_user: User = Depends(get_current_user)):
     if not q or len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
     try:
         return search_spotify_tracks(q.strip(), limit=limit)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Search failed: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Search failed: {e!s}") from e
 
 
 @router.get("/artist")
-def search_artist(
-    name: str,
-    limit: int = 50,
-    current_user: User = Depends(get_current_user)
-):
+def search_artist(name: str, limit: int = 50, current_user: User = Depends(get_current_user)):
     """Fetch artist discography via consolidated iTunes search."""
     if not name or len(name.strip()) < 2:
         raise HTTPException(status_code=400, detail="Artist name must be at least 2 characters")
     try:
         return search_artist_discography(name.strip(), limit=limit)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Artist search failed: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Artist search failed: {e!s}") from e
 
 
 @router.post("/import", response_model=SongResponse, status_code=status.HTTP_201_CREATED)
 def import_spotify_song(
-    payload: SpotifyImportRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    payload: SpotifyImportRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     try:
         track_id = parse_track_id(payload.spotify_url)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     # Prevent duplicate imports for the same user
     existing = db.query(Song).filter(Song.user_id == current_user.id, Song.spotify_id == track_id).first()
@@ -74,7 +69,7 @@ def import_spotify_song(
     try:
         track_info = fetch_spotify_track_info(payload.spotify_url)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch track: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch track: {e!s}") from e
 
     # 2. Fetch lyrics & analyze sentiment
     lyrics_text = fetch_lyrics(track_info["artist"], track_info["title"])
@@ -128,7 +123,7 @@ def import_spotify_song(
         acousticness=audio_features.get("acousticness", 0.0),
         instrumentalness=audio_features.get("instrumentalness", 0.0),
         speechiness=audio_features.get("speechiness", 0.0),
-        liveness=track_info.get("liveness", 0.0)
+        liveness=track_info.get("liveness", 0.0),
     )
     db.add(new_song)
     db.commit()
@@ -138,9 +133,7 @@ def import_spotify_song(
 
 @router.post("/import-itunes", response_model=SongResponse, status_code=status.HTTP_201_CREATED)
 def import_itunes_song(
-    payload: iTunesImportRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    payload: iTunesImportRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Import a song from iTunes by title + artist search."""
     # Search iTunes
@@ -152,10 +145,7 @@ def import_itunes_song(
     itunes_id = str(track.get("trackId", ""))
 
     # Check duplicate
-    existing = db.query(Song).filter(
-        Song.user_id == current_user.id,
-        Song.spotify_id == itunes_id
-    ).first()
+    existing = db.query(Song).filter(Song.user_id == current_user.id, Song.spotify_id == itunes_id).first()
     if existing:
         return existing
 
@@ -165,15 +155,17 @@ def import_itunes_song(
     album_art = track.get("artworkUrl100", "")
     duration_ms = track.get("trackTimeMillis", 0)
 
-    mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features({
-        "tempo": 100.0,
-        "energy": 0.5,
-        "danceability": 0.5,
-        "valence": 0.5,
-        "acousticness": 0.3,
-        "instrumentalness": 0.0,
-        "speechiness": 0.05,
-    })
+    mood_label, mood_strength, _ = knowledge_service.classify_mood_from_features(
+        {
+            "tempo": 100.0,
+            "energy": 0.5,
+            "danceability": 0.5,
+            "valence": 0.5,
+            "acousticness": 0.3,
+            "instrumentalness": 0.0,
+            "speechiness": 0.05,
+        }
+    )
 
     # Generate embedding
     profile_text = knowledge_service.build_song_profile(
@@ -206,7 +198,7 @@ def import_itunes_song(
         mood=mood_label,
         mood_confidence=mood_strength,
         embedding=json.dumps(embedding_vec),
-        genre=track.get("primaryGenreName", "pop")
+        genre=track.get("primaryGenreName", "pop"),
     )
     db.add(new_song)
     db.commit()
@@ -214,13 +206,13 @@ def import_itunes_song(
     return new_song
 
 
-@router.get("", response_model=List[SongResponse])
+@router.get("", response_model=list[SongResponse])
 def list_songs(
-    mood: Optional[str] = None,
+    mood: str | None = None,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     query = db.query(Song).filter(Song.user_id == current_user.id)
     if mood:
@@ -229,11 +221,7 @@ def list_songs(
 
 
 @router.get("/count")
-def count_songs(
-    mood: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def count_songs(mood: str | None = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(Song).filter(Song.user_id == current_user.id)
     if mood:
         query = query.filter(Song.mood == mood.lower())

@@ -1,4 +1,4 @@
-﻿# MoodBeats — AI Context & Architecture Source of Truth (v6.0)
+﻿# MoodBeats — AI Context & Architecture Source of Truth (v6.1)
 
 > **FOR AI ASSISTANTS & DEVELOPERS**: This file is the single source of truth for the MoodBeats project.
 > Read this ENTIRE file before making any changes, refactoring code, or answering questions.
@@ -11,7 +11,7 @@
 - **Developer**: Samar.
 - **Stack**: Vue 3 (Vite) + FastAPI + SQLAlchemy/SQLite + PyTorch + Ollama (llama3.2).
 - **GitHub**: `https://github.com/SammySN-car/moodbeats` (AGPL-3.0)
-- **Version**: v6.0.0
+- **Version**: v6.1.0
 
 ### Core Architecture
 - **100% Zero-Storage**: No raw audio files. Audio feature extraction runs in RAM.
@@ -26,44 +26,62 @@
 
 ```
 moodbeats-redesign/
-  MOODBEATS_AI_CONTEXT.md          ← THIS FILE
-  CHANGELOG.md                     ← Living improvement tracker (updated after every task)
+  MOODBEATS_AI_CONTEXT.md          <- THIS FILE (v6.1 source of truth)
+  CHANGELOG.md                     <- Living improvement tracker (updated after every task)
   README.md, LICENSE (AGPL-3.0), .gitignore, DESIGN_SYSTEM.md, USER_FLOW.md
+  ARCHITECTURE_FLOW_AND_AUDIT.md   <- Historical v5.2 audit (superseded by this file)
+  rag_upgrade.md                   <- RAG research + upgrade plan
   backend/
-    main.py                        FastAPI app v6.0, CORS, router registration
-    config.py                      Settings (TASTE_WEIGHT=0.3, RRF_K=60, MMR_LAMBDA=0.7, etc.)
+    main.py                        FastAPI app, CORS, model pre-warming, router registration
+    config.py                      Settings (TASTE_WEIGHT, RRF_K, MMR_LAMBDA, DEMO_USER_ID, ...)
     database.py                    SQLAlchemy engine + session
-    models.py                      User, Song, ListeningEvent, Playlist, PlaylistItem
-    schemas.py                     Pydantic v2 schemas
-    moodbeats.db                   SQLite database (0.19 MB)
+    models.py                      User, Song, ListeningEvent, Playlist, PlaylistItem (+ utcnow helper)
+    schemas.py                     Pydantic v2 request/response schemas
+    moodbeats.db                   SQLite database
     utils/
-      auth.py                      JWT auth, bcrypt
-      spotify.py                   oEmbed + iTunes search + audio extraction
+      auth.py                      JWT auth, bcrypt, get_current_user dependency
+      spotify.py                   Spotify URL parsing, iTunes search, preview audio extraction
     ml/
       embedding_service.py         Bi-encoder, cross-encoder, PyTorch tensor ops
       rag_playlist_generator.py    RRF fusion, MMR diversity, AI DJ synthesis, taste blending
-      query_planner.py             Ollama-based query decomposition, HyDE, mood normalization
-      mood_classifier.py           5-mood rule classifier
+      query_planner.py             Ollama query decomposition, HyDE, mood normalization
+      knowledge_service.py         Mood/genre classification, song profile building
+      faiss_service.py             FAISS index over knowledge-base embeddings
       lyrics_fetcher.py            Lyrics.ovh API
       sentiment.py                 DistilBERT sentiment
+      music_knowledge_base.json    114K-track corpus (114 genres, 7 mood categories)
+      song_index.faiss, song_encoder.pt, song_id_mapping.json
     routers/
       auth.py                      /api/auth (register, login, me)
-      songs.py                     /api/songs (CRUD, search, import, import-itunes, youtube-id)
-      playlists.py                 /api/playlists (generate, create, list, delete)
-      listening.py                 /api/listening (event, history, taste)
+      songs.py                     /api/songs (list, detail, delete, search, artist, import, youtube-id)
+      playlists.py                 /api/playlists (list, detail, create, delete, generate, import-spotify)
+      listening.py                 /api/listening (event, history)
       analytics.py                 /api/analytics (mood-distribution, stats)
+    scripts/
+      genre_classifier.py          Rule-based genre classifier (importlib-loaded by knowledge_service)
+      import_kaggle_songs.py       Knowledge-base builder
+    tests/                         38 pytest tests (conftest mocks torch/FAISS/spotify_scraper)
   frontend/
     src/
       App.vue, main.js, router.js, style.css
-      api/client.js                Axios with JWT interceptor
-      composables/usePlayer.js     Global audio state + feedback events (fire-and-forget)
-      views/Login.vue, Signup.vue, Dashboard.vue
-      components/
-        BottomPlayer.vue           Persistent bottom player with YouTube drawer
-        ImportSong.vue             Artist discography + track search + "In Library" badge
-        SongLibrary.vue            Library with play_count/skip_count/saved badges
-        MoodDiscover.vue           AI DJ prompt + taste indicator + recommendations
-        MoodAnalytics.vue          KPI cards + mood chart
+      api/client.js                Axios + JWT interceptor (VITE_API_URL)
+      layouts/DefaultLayout.vue    Header, tab nav, bottom player mount
+      shared/
+        composables/usePlayer.js   Global audio state, preview/full modes, feedback events
+        components/BaseBadge.vue, BaseEmptyState.vue, BaseSearchBar.vue, BaseSpinner.vue
+      features/
+        auth/views/Login.vue, Signup.vue
+        home/views/HomeView.vue
+        discover/views/DiscoverView.vue
+        discover/components/MoodDiscover.vue, PlaylistHistory.vue, PlaylistDetail.vue
+        library/views/LibraryView.vue
+        library/components/SongLibrary.vue, SongDetail.vue
+        import/views/ImportView.vue
+        import/components/ImportSong.vue, SpotifyPlaylistImport.vue
+        player/components/BottomPlayer.vue
+        analytics/views/AnalyticsView.vue
+        analytics/components/MoodAnalytics.vue
+    src/__tests__/                 20 vitest tests (utils, usePlayer, useAlbumArt)
 ```
 
 ---
@@ -80,29 +98,35 @@ moodbeats-redesign/
 ### Songs
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/songs` | GET | User's song library |
-| `/api/songs` | POST | Import Spotify URL |
+| `/api/songs` | GET | User's song library (filter by mood) |
+| `/api/songs/count` | GET | Library count |
 | `/api/songs/{id}` | GET | Song detail with feedback stats |
 | `/api/songs/{id}` | DELETE | Remove from library |
-| `/api/songs/search?q=...` | GET | Live track search |
+| `/api/songs/search?q=...` | GET | Live track search (iTunes) |
 | `/api/songs/artist?name=...&limit=50` | GET | Artist discography |
+| `/api/songs/import` | POST | Import from Spotify URL |
 | `/api/songs/import-itunes` | POST | Import by title+artist (iTunes) |
 | `/api/songs/youtube-id?title=...&artist=...` | GET | Resolve YouTube Topic ID |
+| `/api/songs/album-art?...` | GET | Album art lookup/proxy |
+| `/api/songs/preview-url?...` | GET | Preview URL lookup |
 
 ### Playlists
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/playlists/generate` | POST | RAG + AI DJ playlist generation |
-| `/api/playlists` | GET | List all playlists |
-| `/api/playlists` | POST | Create manual playlist |
+| `/api/playlists` | GET | List playlists (items with missing songs filtered) |
+| `/api/playlists/{id}` | GET | Playlist detail with full track list |
+| `/api/playlists` | POST | Create manual playlist from song IDs |
 | `/api/playlists/{id}` | DELETE | Delete playlist |
+| `/api/playlists/generate` | POST | RAG + AI DJ playlist generation |
+| `/api/playlists/import-spotify` | POST | Import Spotify playlist (creates missing songs with extracted audio features) |
 
 ### Listening Feedback
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/listening/event` | POST | Record play/skip/save event |
+| `/api/listening/event` | POST | Record play/skip/save/unsave event |
 | `/api/listening/history` | GET | Recent listening history |
-| `/api/listening/taste` | POST | Force recompute taste vector |
+
+Note: taste vector is recomputed automatically every 10 events (no manual endpoint).
 
 ### Analytics
 | Endpoint | Method | Description |
@@ -144,7 +168,8 @@ moodbeats-redesign/
 - **Ollama KV-cache poisoning**: llama3.2 may reuse previous query's response. Workaround: retry on stale detection.
 - **Ollama JSON truncation**: num_predict=1500 (main), 1000 (fallback) + JSON repair logic.
 - **AI DJ positional indices**: LLM returns [1,2,3] instead of DB IDs [43,44,45] — mapped via positional index step in playlists.py.
-- **Demo songs**: User `demo@test.com` / `demo1234` (user_id=15) has 5 seeded songs, 48 total in DB.
+- **Spotify Audio Features API deprecated (403s)**: audio features are now extracted locally from iTunes preview audio via librosa.
+- **Demo account**: `demo@test.com` / `demo1234` (user_id=15) — large seeded library (~90K songs), 17 playlists.
 
 ---
 
@@ -160,18 +185,26 @@ moodbeats-redesign/
 
 ## 7. Testing
 
-### E2E Test Phases (all passing)
-1. Frontend loads
-2. Auth (register + login)
-3. Library (songs list)
-4. Events (play/skip/save)
-5. Aggregates (play_count, skip_count)
-6. History (listening history)
-7. Taste (taste vector recomputation)
-8. RAG generate (playlist generation)
-9. Song detail (feedback fields)
+### Test Suites (all passing — 58 total)
+- **Backend**: 38 pytest tests (`backend/tests/`) — auth, songs, playlists, listening, analytics, Spotify import, health. `conftest.py` mocks torch/FAISS/`spotify_scraper` so tests run without model loads.
+- **Frontend**: 20 vitest tests (`frontend/src/__tests__/`) — utils, usePlayer, useAlbumArt.
 
 ### Running Tests
+```bash
+cd backend
+python -m pytest tests/ -q
+
+cd frontend
+npm run test
+```
+
+### Linting
+```bash
+cd backend
+ruff check .
+```
+
+### Smoke Checks
 ```bash
 cd backend
 python -c "from main import app; print('Import OK')"
@@ -182,6 +215,14 @@ python -c "from ml.rag_playlist_generator import pytorch_database_rag_search; pr
 
 ## 8. Git Status
 
-- **Last commit**: `29fbdd7` — "Add feedback loop, taste profile, and import system"
+- **Last docs refresh**: 2026-09-30 (this file, v6.1)
 - **Pushed to**: `https://github.com/SammySN-car/moodbeats` (main branch)
-- **Working tree**: Clean (all changes committed)
+
+### Recent History
+- `2e8d1ac` docs: add testing status and key features section to README
+- `5e599dd` fix: replace deprecated datetime.utcnow() with timezone-aware equivalent
+- `2281cd4` fix: repair mojibake encoding in README, CHANGELOG, and SongLibrary
+- `e404b6c` fix: 11 UI/UX bugs from sandbox audit
+- `5cf6ab8` fix: playlist plays full YouTube songs instead of 30s previews
+- `701ae4f` feat: playlist detail page with play/delete + hide empty playlists
+- `0c8d39f` fix: restore Spotify import song creation + playlist CRUD endpoints

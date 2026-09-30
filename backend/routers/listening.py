@@ -1,16 +1,20 @@
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from config import settings
 from database import get_db
-from models import User, Song, ListeningEvent
+from models import ListeningEvent, Song, User
 from schemas import (
-    ListeningEventRequest, ListeningEventResponse,
-    HistoryItem, TasteProfileResponse, SongResponse,
+    HistoryItem,
+    ListeningEventRequest,
+    ListeningEventResponse,
+    TasteProfileResponse,
 )
 from utils.auth import get_current_user
-from config import settings
 
 router = APIRouter(prefix="/api/listening", tags=["Listening Feedback"])
 
@@ -25,10 +29,14 @@ def record_listening_event(
     db: Session = Depends(get_db),
 ):
     """Record a play, skip, save, or unsave event."""
-    song = db.query(Song).filter(
-        Song.id == payload.song_id,
-        Song.user_id == current_user.id,
-    ).first()
+    song = (
+        db.query(Song)
+        .filter(
+            Song.id == payload.song_id,
+            Song.user_id == current_user.id,
+        )
+        .first()
+    )
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
 
@@ -42,7 +50,7 @@ def record_listening_event(
 
     if payload.event_type == "play":
         song.play_count += 1
-        song.last_played_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        song.last_played_at = datetime.now(UTC).replace(tzinfo=None)
         if payload.duration_listened > 0:
             song.total_listen_sec += payload.duration_listened
     elif payload.event_type == "skip":
@@ -84,6 +92,7 @@ def get_listening_history(
     )
     return events
 
+
 def _recompute_taste_vector(user: User, db: Session) -> TasteProfileResponse:
     """Average embeddings of top-played songs into a single taste vector."""
 
@@ -96,11 +105,7 @@ def _recompute_taste_vector(user: User, db: Session) -> TasteProfileResponse:
     )
 
     if len(top_songs) < 5:
-        saved_songs = (
-            db.query(Song)
-            .filter(Song.user_id == user.id, Song.embedding.isnot(None), Song.saved == True)
-            .all()
-        )
+        saved_songs = db.query(Song).filter(Song.user_id == user.id, Song.embedding.isnot(None), Song.saved).all()
         seen_ids = {s.id for s in top_songs}
         for s in saved_songs:
             if s.id not in seen_ids:
@@ -115,6 +120,7 @@ def _recompute_taste_vector(user: User, db: Session) -> TasteProfileResponse:
         return TasteProfileResponse(has_taste=False, songs_used=0)
 
     import numpy as np
+
     vectors = []
     for song in top_songs:
         try:
@@ -131,7 +137,7 @@ def _recompute_taste_vector(user: User, db: Session) -> TasteProfileResponse:
 
     taste = np.mean(vectors, axis=0).tolist()
     user.taste_vector = json.dumps(taste)
-    user.taste_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    user.taste_updated_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
 
     print(f"[TasteProfile] Recomputed for user {user.id}: {len(vectors)} songs averaged")

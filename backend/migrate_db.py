@@ -3,11 +3,12 @@ Database Migration Script
 Adds missing columns to the songs table for the Kaggle knowledge base integration.
 Run once before importing songs.
 """
+
 import sqlite3
 import sys
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / 'moodbeats.db'
+DB_PATH = Path(__file__).parent / "moodbeats.db"
 
 
 def migrate():
@@ -19,7 +20,7 @@ def migrate():
     cursor = conn.cursor()
 
     # Check existing columns
-    cursor.execute('PRAGMA table_info(songs)')
+    cursor.execute("PRAGMA table_info(songs)")
     existing_cols = [row[1] for row in cursor.fetchall()]
     print(f"Existing columns: {existing_cols}")
 
@@ -50,5 +51,5 @@ def migrate():
         print("\nNo migration needed: all columns already exist")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     migrate()

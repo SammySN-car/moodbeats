@@ -1,11 +1,12 @@
 """FAISS similarity search service."""
 
 import json
-import numpy as np
 from pathlib import Path
 
-INDEX_PATH = Path(__file__).parent / 'song_index.faiss'
-MAPPING_PATH = Path(__file__).parent / 'song_id_mapping.json'
+import numpy as np
+
+INDEX_PATH = Path(__file__).parent / "song_index.faiss"
+MAPPING_PATH = Path(__file__).parent / "song_id_mapping.json"
 
 
 class FAISSService:
@@ -33,10 +34,10 @@ class FAISSService:
             self.song_ids = []
             return
         self.index = faiss.read_index(str(INDEX_PATH))
-        with open(MAPPING_PATH, 'r') as f:
+        with open(MAPPING_PATH) as f:
             self.song_ids = json.load(f)
         self._loaded = True
-        print(f'FAISS index loaded: {self.index.ntotal} vectors')
+        print(f"FAISS index loaded: {self.index.ntotal} vectors")
 
     @property
     def is_loaded(self):
@@ -46,15 +47,17 @@ class FAISSService:
         if not self.is_loaded:
             return []
         import faiss
-        q = np.asarray(query_embedding, dtype='float32').reshape(1, -1)
+
+        q = np.asarray(query_embedding, dtype="float32").reshape(1, -1)
         faiss.normalize_L2(q)
         if self.index.ntotal == 0:
             return []
         scores, indices = self.index.search(q, min(top_k, self.index.ntotal))
         results = []
-        for score, idx in zip(scores[0], indices[0]):
+        for score, idx in zip(scores[0], indices[0], strict=False):
             if 0 <= idx < len(self.song_ids):
                 results.append((self.song_ids[idx], float(score)))
         return results
+
 
 faiss_service = FAISSService()

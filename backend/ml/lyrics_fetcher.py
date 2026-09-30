@@ -1,5 +1,7 @@
 import re
+
 import requests
+
 
 def clean_track_title(title: str) -> str:
     """Strip feature tags, remaster tags, and live indicators for accurate lyrics matching."""
@@ -10,11 +12,12 @@ def clean_track_title(title: str) -> str:
     cleaned = re.sub(r"\[.*?\]", "", cleaned)
     return cleaned.strip()
 
+
 def fetch_lyrics(artist: str, title: str) -> str:
     """Fetch lyrics from public API with timeout protection and cleaned titles."""
     if not artist or artist.lower() == "unknown artist" or not title:
         return ""
-    
+
     clean_title = clean_track_title(title)
     clean_artist = artist.split(",")[0].strip()
 

@@ -1,14 +1,16 @@
 import io
 import re
 import subprocess
-import requests
-import numpy as np
-import scipy.io.wavfile
+
 import librosa
+import numpy as np
+import requests
+import scipy.io.wavfile
 
 # ══════════════════════════════════════════════════════════════
 #  Unified iTunes Search — single source of truth
 # ══════════════════════════════════════════════════════════════
+
 
 def search_itunes(query: str, entity: str = "song", limit: int = 5) -> list[dict]:
     """Search iTunes by keyword. Returns raw result dicts."""
@@ -19,7 +21,7 @@ def search_itunes(query: str, entity: str = "song", limit: int = 5) -> list[dict
             "https://itunes.apple.com/search",
             params={"term": query.strip(), "entity": entity, "limit": min(limit, 50)},
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=8
+            timeout=8,
         )
         resp.raise_for_status()
         return resp.json().get("results", [])
@@ -42,14 +44,16 @@ def search_spotify_tracks(query: str, limit: int = 5) -> list[dict]:
     for item in raw:
         title = item.get("trackName", "")
         artist = item.get("artistName", "")
-        output.append({
-            "spotify_id": f"search_{item.get('trackId')}",
-            "spotify_url": f"https://open.spotify.com/search/{title} {artist}",
-            "title": title,
-            "artist": artist,
-            "album_art_url": item.get("artworkUrl100"),
-            "duration_sec": item.get("trackTimeMillis", 0) / 1000.0
-        })
+        output.append(
+            {
+                "spotify_id": f"search_{item.get('trackId')}",
+                "spotify_url": f"https://open.spotify.com/search/{title} {artist}",
+                "title": title,
+                "artist": artist,
+                "album_art_url": item.get("artworkUrl100"),
+                "duration_sec": item.get("trackTimeMillis", 0) / 1000.0,
+            }
+        )
     return output
 
 
@@ -67,16 +71,18 @@ def search_artist_discography(name: str, limit: int = 50) -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
-        output.append({
-            "title": title,
-            "artist": artist,
-            "album_name": item.get("collectionName", ""),
-            "album_art_url": item.get("artworkUrl100"),
-            "preview_url": item.get("previewUrl"),
-            "duration_sec": item.get("trackTimeMillis", 0) / 1000.0,
-            "spotify_url": f"https://open.spotify.com/search/{title} {artist}",
-            "spotify_id": f"art_{item.get('trackId')}"
-        })
+        output.append(
+            {
+                "title": title,
+                "artist": artist,
+                "album_name": item.get("collectionName", ""),
+                "album_art_url": item.get("artworkUrl100"),
+                "preview_url": item.get("previewUrl"),
+                "duration_sec": item.get("trackTimeMillis", 0) / 1000.0,
+                "spotify_url": f"https://open.spotify.com/search/{title} {artist}",
+                "spotify_id": f"art_{item.get('trackId')}",
+            }
+        )
     return output
 
 
@@ -85,6 +91,7 @@ def search_artist_discography(name: str, limit: int = 50) -> list[dict]:
 # ══════════════════════════════════════════════════════════════
 
 _yt_cache = {}
+
 
 def find_youtube_video_id(artist: str, title: str) -> str | None:
     """Find official audio on YouTube using yt-dlp. Returns video ID or None."""
@@ -97,25 +104,21 @@ def find_youtube_video_id(artist: str, title: str) -> str | None:
     except ImportError:
         return None
 
-    queries = [
-        f"{artist} - {title} Topic",
-        f"{artist} {title} official audio",
-        f"{artist} {title}"
-    ]
+    queries = [f"{artist} - {title} Topic", f"{artist} {title} official audio", f"{artist} {title}"]
 
     for q in queries:
         try:
             ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'default_search': 'ytsearch1',
-                'skip_download': True,
-                'socket_timeout': 5,
+                "quiet": True,
+                "no_warnings": True,
+                "default_search": "ytsearch1",
+                "skip_download": True,
+                "socket_timeout": 5,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 result = ydl.extract_info(f"ytsearch1:{q}", download=False)
-                if result and 'entries' in result and result['entries']:
-                    vid = result['entries'][0].get('id')
+                if result and "entries" in result and result["entries"]:
+                    vid = result["entries"][0].get("id")
                     if vid:
                         _yt_cache[cache_key] = vid
                         return vid
@@ -127,6 +130,7 @@ def find_youtube_video_id(artist: str, title: str) -> str | None:
 # ══════════════════════════════════════════════════════════════
 #  Audio Feature Extraction
 # ══════════════════════════════════════════════════════════════
+
 
 def extract_audio_features_from_preview(preview_url: str | None) -> tuple[float, float, float, float]:
     """
@@ -140,7 +144,7 @@ def extract_audio_features_from_preview(preview_url: str | None) -> tuple[float,
         return 120.0, 0.5, 0.5, 0.5
     try:
         audio_data = requests.get(preview_url, timeout=6).content
-        cmd = ['ffmpeg', '-i', 'pipe:0', '-f', 'wav', '-ar', '22050', '-ac', '1', 'pipe:1']
+        cmd = ["ffmpeg", "-i", "pipe:0", "-f", "wav", "-ar", "22050", "-ac", "1", "pipe:1"]
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         wav_bytes, _ = proc.communicate(input=audio_data)
 
@@ -149,7 +153,7 @@ def extract_audio_features_from_preview(preview_url: str | None) -> tuple[float,
 
         # Tempo (BPM)
         tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-        tempo_val = float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo)
+        tempo_val = float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
         if tempo_val < 90:
             tempo_val *= 2
 
@@ -182,9 +186,7 @@ def fetch_spotify_track_info(spotify_url: str) -> dict:
     # 1. Spotify Title & Cover Art via Public oEmbed
     try:
         oembed_resp = requests.get(
-            f"https://open.spotify.com/oembed?url={spotify_url}",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=8
+            f"https://open.spotify.com/oembed?url={spotify_url}", headers={"User-Agent": "Mozilla/5.0"}, timeout=8
         )
         if oembed_resp.status_code == 200:
             oembed_data = oembed_resp.json()
@@ -221,5 +223,5 @@ def fetch_spotify_track_info(spotify_url: str) -> dict:
         "tempo": tempo,
         "energy": energy,
         "danceability": danceability,
-        "valence": valence
+        "valence": valence,
     }

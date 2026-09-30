@@ -9,13 +9,14 @@
 #   4. Identify search paths (mood filter, tempo filter, semantic)
 # =============================================================================
 
+import hashlib
 import json
-import requests
 import re
 import time
-import hashlib
-from config import settings
 
+import requests
+
+from config import settings
 
 # ----- Default plan when Ollama is unavailable -----
 DEFAULT_PLAN = {
@@ -28,30 +29,85 @@ DEFAULT_PLAN = {
 
 # ----- Mood normalization map -----
 MOOD_MAP = {
-    "happy": "euphoric", "joyful": "euphoric", "upbeat": "euphoric", "cheerful": "euphoric",
-    "fun": "euphoric", "party": "euphoric", "dance": "euphoric", "euphoric": "euphoric",
-    "bright": "euphoric", "sunny": "euphoric", "feel-good": "euphoric", "feel good": "euphoric",
-    "summer": "euphoric", "pop": "euphoric",
-    "sad": "sad", "melancholic": "sad", "melancholy": "sad", "sorrowful": "sad",
-    "heartbroken": "sad", "depressing": "sad", "dark": "sad", "gloomy": "sad",
-    "somber": "sad", "bittersweet": "sad", "nostalgic": "sad", "emo": "sad",
-    "emotional": "sad", "tearful": "sad", "lonely": "sad",
-    "energetic": "energetic", "aggressive": "energetic", "intense": "energetic",
-    "hard": "energetic", "powerful": "energetic", "explosive": "energetic",
-    "hype": "energetic", "banger": "energetic", "pump": "energetic",
-    "drill": "energetic", "phonk": "energetic", "drift": "energetic",
-    "workout": "energetic", "gym": "energetic", "festival": "energetic",
-    "rave": "energetic", "edm": "energetic", "dubstep": "energetic",
-    "bass": "energetic", "distortion": "energetic", "metal": "energetic",
+    "happy": "euphoric",
+    "joyful": "euphoric",
+    "upbeat": "euphoric",
+    "cheerful": "euphoric",
+    "fun": "euphoric",
+    "party": "euphoric",
+    "dance": "euphoric",
+    "euphoric": "euphoric",
+    "bright": "euphoric",
+    "sunny": "euphoric",
+    "feel-good": "euphoric",
+    "feel good": "euphoric",
+    "summer": "euphoric",
+    "pop": "euphoric",
+    "sad": "sad",
+    "melancholic": "sad",
+    "melancholy": "sad",
+    "sorrowful": "sad",
+    "heartbroken": "sad",
+    "depressing": "sad",
+    "dark": "sad",
+    "gloomy": "sad",
+    "somber": "sad",
+    "bittersweet": "sad",
+    "nostalgic": "sad",
+    "emo": "sad",
+    "emotional": "sad",
+    "tearful": "sad",
+    "lonely": "sad",
+    "energetic": "energetic",
+    "aggressive": "energetic",
+    "intense": "energetic",
+    "hard": "energetic",
+    "powerful": "energetic",
+    "explosive": "energetic",
+    "hype": "energetic",
+    "banger": "energetic",
+    "pump": "energetic",
+    "drill": "energetic",
+    "phonk": "energetic",
+    "drift": "energetic",
+    "workout": "energetic",
+    "gym": "energetic",
+    "festival": "energetic",
+    "rave": "energetic",
+    "edm": "energetic",
+    "dubstep": "energetic",
+    "bass": "energetic",
+    "distortion": "energetic",
+    "metal": "energetic",
     "boss fight": "energetic",
-    "chill": "chill", "calm": "chill", "relaxed": "chill", "mellow": "chill",
-    "lo-fi": "chill", "lofi": "chill", "study": "chill", "ambient": "chill",
-    "atmospheric": "chill", "dreamy": "chill", "soft": "chill", "gentle": "chill",
-    "peaceful": "chill", "serene": "chill", "cozy": "chill", "rainy": "chill",
-    "night": "chill", "late night": "chill", "driving": "chill",
-    "romantic": "chill", "love": "chill", "intimate": "chill",
-    "sensual": "chill", "passionate": "chill", "tender": "chill",
-    "sweet": "chill", "dinner": "chill", "wedding": "chill",
+    "chill": "chill",
+    "calm": "chill",
+    "relaxed": "chill",
+    "mellow": "chill",
+    "lo-fi": "chill",
+    "lofi": "chill",
+    "study": "chill",
+    "ambient": "chill",
+    "atmospheric": "chill",
+    "dreamy": "chill",
+    "soft": "chill",
+    "gentle": "chill",
+    "peaceful": "chill",
+    "serene": "chill",
+    "cozy": "chill",
+    "rainy": "chill",
+    "night": "chill",
+    "late night": "chill",
+    "driving": "chill",
+    "romantic": "chill",
+    "love": "chill",
+    "intimate": "chill",
+    "sensual": "chill",
+    "passionate": "chill",
+    "tender": "chill",
+    "sweet": "chill",
+    "dinner": "chill",
+    "wedding": "chill",
 }
 
 
@@ -100,10 +156,11 @@ def _override_mood_from_keywords(user_prompt: str, ollama_mood: str) -> str:
 
     for keywords, correct_mood in OVERRIDE_RULES:
         for kw in keywords:
-            if kw in prompt_lower:
-                if ollama_mood != correct_mood:
-                    print(f"[QueryPlanner] Override: keyword '{kw}' detected, changing mood from '{ollama_mood}' to '{correct_mood}'")
-                    return correct_mood
+            if kw in prompt_lower and ollama_mood != correct_mood:
+                print(
+                    f"[QueryPlanner] Override: keyword '{kw}' detected, changing mood from '{ollama_mood}' to '{correct_mood}'"
+                )
+                return correct_mood
 
     return ollama_mood
 
@@ -125,7 +182,7 @@ def _detect_stale_response(plan: dict, user_prompt: str) -> bool:
     has_party_prompt = any(w in prompt_lower for w in party_words)
 
     if has_romantic_hyde and has_party_prompt:
-        print(f"[QueryPlanner] Stale response detected: romantic HyDE for party prompt")
+        print("[QueryPlanner] Stale response detected: romantic HyDE for party prompt")
         return True
 
     # Check 2: If mood is romantic but prompt has energetic/happy keywords
@@ -133,10 +190,9 @@ def _detect_stale_response(plan: dict, user_prompt: str) -> bool:
     energetic_kw = ["phonk", "drift", "gym", "workout", "edm", "festival", "metal"]
     happy_kw = ["party", "dance", "fun", "summer", "pop"]
 
-    if mood == "romantic":
-        if any(w in prompt_lower for w in energetic_kw + happy_kw):
-            print(f"[QueryPlanner] Stale response detected: romantic mood for energetic/happy prompt")
-            return True
+    if mood == "romantic" and any(w in prompt_lower for w in energetic_kw + happy_kw):
+        print("[QueryPlanner] Stale response detected: romantic mood for energetic/happy prompt")
+        return True
 
     return False
 
@@ -210,10 +266,10 @@ Respond in valid JSON ONLY."""
                 "options": {
                     "num_predict": 500,
                     "temperature": 0.5,
-                    "repeat_penalty": 1.2  # Penalize repeated tokens to prevent stale output
-                }
+                    "repeat_penalty": 1.2,  # Penalize repeated tokens to prevent stale output
+                },
             },
-            timeout=settings.OLLAMA_TIMEOUT_SECONDS
+            timeout=settings.OLLAMA_TIMEOUT_SECONDS,
         )
 
         if resp.status_code == 200:
@@ -259,10 +315,10 @@ Respond in valid JSON ONLY."""
                             "options": {
                                 "num_predict": 500,
                                 "temperature": 0.6,  # Higher temp on retry
-                                "repeat_penalty": 1.5
-                            }
+                                "repeat_penalty": 1.5,
+                            },
                         },
-                        timeout=settings.OLLAMA_TIMEOUT_SECONDS
+                        timeout=settings.OLLAMA_TIMEOUT_SECONDS,
                     )
                     if resp2.status_code == 200:
                         raw2 = resp2.json().get("response", "{}")
@@ -279,19 +335,30 @@ Respond in valid JSON ONLY."""
                     print(f"[QueryPlanner] Retry failed: {e}")
 
             # Check 2: Override mood based on keywords in prompt
-            validated_plan["mood"] = _override_mood_from_keywords(
-                user_prompt, validated_plan["mood"]
-            )
+            validated_plan["mood"] = _override_mood_from_keywords(user_prompt, validated_plan["mood"])
 
             # If mood was overridden, fix HyDE if it contradicts the new mood
             hyde_lower = validated_plan.get("hyde_description", "").lower()
             corrected_mood = validated_plan["mood"]
-            if corrected_mood == "euphoric" and any(w in hyde_lower for w in ["romantic", "tender", "ballad", "candlelit", "intimate"]):
-                validated_plan["hyde_description"] = "An upbeat pop anthem with catchy hooks, bright synths, danceable groove for: " + user_prompt
-            elif corrected_mood == "energetic" and any(w in hyde_lower for w in ["romantic", "tender", "ballad", "soft", "mellow"]):
-                validated_plan["hyde_description"] = "A high-energy track with driving beats, powerful bass, intense atmosphere for: " + user_prompt
-            elif corrected_mood == "sad" and any(w in hyde_lower for w in ["upbeat", "dance", "party", "fun", "bright"]):
-                validated_plan["hyde_description"] = "A melancholic song with emotional vocals, slow tempo, minor key, introspective atmosphere for: " + user_prompt
+            if corrected_mood == "euphoric" and any(
+                w in hyde_lower for w in ["romantic", "tender", "ballad", "candlelit", "intimate"]
+            ):
+                validated_plan["hyde_description"] = (
+                    "An upbeat pop anthem with catchy hooks, bright synths, danceable groove for: " + user_prompt
+                )
+            elif corrected_mood == "energetic" and any(
+                w in hyde_lower for w in ["romantic", "tender", "ballad", "soft", "mellow"]
+            ):
+                validated_plan["hyde_description"] = (
+                    "A high-energy track with driving beats, powerful bass, intense atmosphere for: " + user_prompt
+                )
+            elif corrected_mood == "sad" and any(
+                w in hyde_lower for w in ["upbeat", "dance", "party", "fun", "bright"]
+            ):
+                validated_plan["hyde_description"] = (
+                    "A melancholic song with emotional vocals, slow tempo, minor key, introspective atmosphere for: "
+                    + user_prompt
+                )
 
             return validated_plan
 
@@ -303,7 +370,7 @@ Respond in valid JSON ONLY."""
     # ---------------------------------------------------------------
 
     print("[QueryPlanner] Using fallback plan from raw prompt")
-    words = [w for w in re.sub(r'[^\w\s]', '', user_prompt).split() if len(w) > 2]
+    words = [w for w in re.sub(r"[^\w\s]", "", user_prompt).split() if len(w) > 2]
 
     fallback_mood = None
     for word in words:

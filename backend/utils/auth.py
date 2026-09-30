@@ -1,35 +1,40 @@
-import jwt
+from datetime import UTC, datetime, timedelta
+
 import bcrypt
-from datetime import datetime, timedelta, timezone
+import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+
 from config import settings
 from database import get_db
 from models import User
 
 security = HTTPBearer()
 
+
 def hash_password(password: str) -> str:
-    pwd_bytes = password.encode('utf-8')[:72]
-    return bcrypt.hashpw(pwd_bytes, bcrypt.gensalt()).decode('utf-8')
+    pwd_bytes = password.encode("utf-8")[:72]
+    return bcrypt.hashpw(pwd_bytes, bcrypt.gensalt()).decode("utf-8")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
-        pwd_bytes = plain_password.encode('utf-8')[:72]
-        hash_bytes = hashed_password.encode('utf-8')
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        hash_bytes = hashed_password.encode("utf-8")
         return bcrypt.checkpw(pwd_bytes, hash_bytes)
     except Exception:
         return False
 
+
 def create_access_token(user_id: int) -> str:
-    expiration = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
+    expiration = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
     payload = {"sub": str(user_id), "user_id": user_id, "exp": expiration}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
+
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)
 ) -> User:
     token = credentials.credentials
     try:
@@ -37,11 +42,11 @@ def get_current_user(
         user_id: int = payload.get("user_id")
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
-    
+    except jwt.ExpiredSignatureError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired") from e
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials") from e
+
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")

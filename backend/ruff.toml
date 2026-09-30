@@ -1,0 +1,34 @@
+﻿# Ruff configuration for MoodBeats backend
+line-length = 120
+target-version = "py312"
+exclude = [".git", "__pycache__", "node_modules"]
+
+[lint]
+# Core correctness + style rules
+select = [
+    "E4",    # pycodestyle errors (imports, whitespace)
+    "E7",    # pycodestyle errors (statements)
+    "E9",    # pycodestyle errors (runtime)
+    "F",     # pyflakes (undefined names, unused imports)
+    "I",     # import sorting
+    "UP",    # pyupgrade (modern syntax)
+    "RUF",   # ruff-specific rules
+    "C4",    # comprehensions
+    "SIM",   # simplifications
+    "B",     # bugbear (common bugs)
+]
+
+[lint.flake8-bugbear]
+# FastAPI's Depends()/Query() in argument defaults is the framework's standard
+# dependency-injection pattern — not a bug.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
+
+[lint.per-file-ignores]
+# Deliberate defensive patterns: network/LLM/audio fallbacks must never crash the API.
+"utils/spotify.py" = ["BLE001", "S110", "S112"]
+"routers/*.py" = ["BLE001"]
+"ml/*.py" = ["BLE001"]
+# Import scripts are one-shot tools
+"scripts/*.py" = ["BLE001", "E402"]
+# Tests mock modules before import — ordering is intentional
+"tests/*.py" = ["E402"]

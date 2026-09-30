@@ -1,8 +1,8 @@
+from typing import Any
+
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel, AutoModelForSequenceClassification
-from typing import Any, Dict, Optional
-from .knowledge_service import knowledge_service
+from transformers import AutoModel, AutoModelForSequenceClassification, AutoTokenizer
 
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _bi_tokenizer: Any = None
@@ -10,13 +10,16 @@ _bi_model: Any = None
 _cross_tokenizer: Any = None
 _cross_model: Any = None
 
+
 def get_device():
     return _device
+
 
 def _mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
 
 def get_bi_encoder():
     global _bi_tokenizer, _bi_model
@@ -27,6 +30,7 @@ def get_bi_encoder():
         _bi_model.eval()
     return _bi_tokenizer, _bi_model
 
+
 def get_cross_encoder():
     global _cross_tokenizer, _cross_model
     if _cross_model is None:
@@ -35,6 +39,7 @@ def get_cross_encoder():
         _cross_model = AutoModelForSequenceClassification.from_pretrained(model_id).to(_device)
         _cross_model.eval()
     return _cross_tokenizer, _cross_model
+
 
 def get_text_embedding_tensor(text: str) -> list[float]:
     tokenizer, model = get_bi_encoder()
@@ -45,6 +50,7 @@ def get_text_embedding_tensor(text: str) -> list[float]:
         normalized = F.normalize(pooled, p=2, dim=1)
     return normalized.squeeze(0).cpu().tolist()
 
+
 def get_batch_embeddings_tensor(texts: list[str]) -> torch.Tensor:
     tokenizer, model = get_bi_encoder()
     with torch.inference_mode():
@@ -54,14 +60,15 @@ def get_batch_embeddings_tensor(texts: list[str]) -> torch.Tensor:
         normalized = F.normalize(pooled, p=2, dim=1)
     return normalized
 
+
 def neural_cross_rerank(query: str, doc_texts: list[str]) -> list[float]:
     if not doc_texts:
         return []
     tokenizer, model = get_cross_encoder()
     pairs = [[query, doc] for doc in doc_texts]
-    encoded = tokenizer([p[0] for p in pairs], [p[1] for p in pairs], padding=True, truncation=True, max_length=256, return_tensors="pt").to(_device)
+    encoded = tokenizer(
+        [p[0] for p in pairs], [p[1] for p in pairs], padding=True, truncation=True, max_length=256, return_tensors="pt"
+    ).to(_device)
     with torch.inference_mode():
         logits = model(**encoded).logits.squeeze(-1)
     return logits.cpu().tolist()
-
-

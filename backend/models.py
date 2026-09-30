@@ -1,12 +1,14 @@
-from datetime import datetime, timezone
-from sqlalchemy import Integer, String, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from database import Base
 
 
 def utcnow() -> datetime:
     """Naive UTC timestamp (DB DateTime columns are timezone-naive)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class User(Base):
@@ -24,14 +26,14 @@ class User(Base):
 
     songs: Mapped[list["Song"]] = relationship("Song", backref="owner", cascade="all, delete-orphan")
     playlists: Mapped[list["Playlist"]] = relationship("Playlist", backref="owner", cascade="all, delete-orphan")
-    listening_events: Mapped[list["ListeningEvent"]] = relationship("ListeningEvent", backref="user", cascade="all, delete-orphan")
+    listening_events: Mapped[list["ListeningEvent"]] = relationship(
+        "ListeningEvent", backref="user", cascade="all, delete-orphan"
+    )
 
 
 class Song(Base):
     __tablename__ = "songs"
-    __table_args__ = (
-        UniqueConstraint("user_id", "spotify_id", name="uq_user_spotify_track"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "spotify_id", name="uq_user_spotify_track"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -77,6 +79,7 @@ class Song(Base):
 
 class ListeningEvent(Base):
     """Tracks every play / skip / save interaction for implicit feedback."""
+
     __tablename__ = "listening_events"
 
     id: Mapped[int] = mapped_column(primary_key=True)

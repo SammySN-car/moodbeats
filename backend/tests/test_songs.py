@@ -9,6 +9,7 @@ def test_list_songs_empty(test_client, test_user, auth_headers):
 
 def test_list_songs_with_data(test_client, test_user, auth_headers, test_db):
     from tests.conftest import TestSessionLocal
+
     db = TestSessionLocal()
     create_test_song(db, test_user.id, "Song One", "Artist A")
     create_test_song(db, test_user.id, "Song Two", "Artist B")
@@ -22,6 +23,7 @@ def test_list_songs_with_data(test_client, test_user, auth_headers, test_db):
 
 def test_list_songs_with_mood_filter(test_client, test_user, auth_headers, test_db):
     from tests.conftest import TestSessionLocal
+
     db = TestSessionLocal()
     create_test_song(db, test_user.id, "Chill Song", "Artist A")
     s2 = create_test_song(db, test_user.id, "Energetic Song", "Artist B")
@@ -38,6 +40,7 @@ def test_list_songs_with_mood_filter(test_client, test_user, auth_headers, test_
 
 def test_get_song_count(test_client, test_user, auth_headers, test_db):
     from tests.conftest import TestSessionLocal
+
     db = TestSessionLocal()
     create_test_song(db, test_user.id, "Song 1")
     create_test_song(db, test_user.id, "Song 2")
@@ -50,6 +53,7 @@ def test_get_song_count(test_client, test_user, auth_headers, test_db):
 
 def test_get_single_song(test_client, test_user, auth_headers, test_db):
     from tests.conftest import TestSessionLocal
+
     db = TestSessionLocal()
     song = create_test_song(db, test_user.id, "My Song")
     song_id = song.id
@@ -67,6 +71,7 @@ def test_get_nonexistent_song(test_client, test_user, auth_headers):
 
 def test_delete_song(test_client, test_user, auth_headers, test_db):
     from tests.conftest import TestSessionLocal
+
     db = TestSessionLocal()
     song = create_test_song(db, test_user.id, "Delete Me")
     song_id = song.id
@@ -86,6 +91,7 @@ def test_songs_requires_auth(test_client):
 
 def test_songs_pagination(test_client, test_user, auth_headers, test_db):
     from tests.conftest import TestSessionLocal
+
     db = TestSessionLocal()
     for i in range(25):
         create_test_song(db, test_user.id, f"Song {i}")

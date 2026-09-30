@@ -8,24 +8,25 @@ Usage:
     3. Run from backend/: python scripts/import_kaggle_songs.py
 """
 
-import sys
-import os
 import json
+import sys
 import time
-import pandas as pd
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from ml.genre_classifier import classify_song
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from models import Base, Song
+
 from config import settings
 from ml.knowledge_service import knowledge_service
-from ml.genre_classifier import classify_song
+from models import Song
 
-CSV_PATH = Path(__file__).parent.parent / 'data' / 'dataset.csv'
+CSV_PATH = Path(__file__).parent.parent / "data" / "dataset.csv"
 BATCH_SIZE = 128
 DEMO_USER_ID = 15
 
@@ -37,27 +38,27 @@ def load_csv():
         print("Place dataset.csv in backend/data/")
         sys.exit(1)
     df = pd.read_csv(CSV_PATH)
-    df = df.drop_duplicates(subset=['track_id'])
+    df = df.drop_duplicates(subset=["track_id"])
     print(f"Loaded {len(df):,} tracks from {CSV_PATH.name}")
     return df
 
 
 def classify_batch(row):
     features = {
-        'energy': float(getattr(row, 'energy', 0.5)),
-        'valence': float(getattr(row, 'valence', 0.5)),
-        'danceability': float(getattr(row, 'danceability', 0.5)),
-        'acousticness': float(getattr(row, 'acousticness', 0.3)),
-        'instrumentalness': float(getattr(row, 'instrumentalness', 0.0)),
-        'speechiness': float(getattr(row, 'speechiness', 0.05)),
-        'tempo': float(getattr(row, 'tempo', 120)),
-        'liveness': float(getattr(row, 'liveness', 0.2)),
-        'loudness': float(getattr(row, 'loudness', -8.0)),
+        "energy": float(getattr(row, "energy", 0.5)),
+        "valence": float(getattr(row, "valence", 0.5)),
+        "danceability": float(getattr(row, "danceability", 0.5)),
+        "acousticness": float(getattr(row, "acousticness", 0.3)),
+        "instrumentalness": float(getattr(row, "instrumentalness", 0.0)),
+        "speechiness": float(getattr(row, "speechiness", 0.05)),
+        "tempo": float(getattr(row, "tempo", 120)),
+        "liveness": float(getattr(row, "liveness", 0.2)),
+        "loudness": float(getattr(row, "loudness", -8.0)),
     }
     mood, confidence, _ = knowledge_service.classify_mood_from_features(features)
 
     # Use genre classifier with direct mapping when Kaggle label available
-    kaggle_genre = str(getattr(row, 'track_genre', ''))
+    kaggle_genre = str(getattr(row, "track_genre", ""))
     genre = classify_song(features, kaggle_genre)
 
     return mood, confidence, genre
@@ -66,19 +67,19 @@ def classify_batch(row):
 def build_song_text(row):
     """Use canonical knowledge_service profile builder for embedding alignment."""
     features = {
-        'energy': float(getattr(row, 'energy', 0.5)),
-        'valence': float(getattr(row, 'valence', 0.5)),
-        'danceability': float(getattr(row, 'danceability', 0.5)),
-        'acousticness': float(getattr(row, 'acousticness', 0.0)),
-        'instrumentalness': float(getattr(row, 'instrumentalness', 0.0)),
-        'speechiness': float(getattr(row, 'speechiness', 0.05)),
-        'tempo': float(getattr(row, 'tempo', 120.0)),
+        "energy": float(getattr(row, "energy", 0.5)),
+        "valence": float(getattr(row, "valence", 0.5)),
+        "danceability": float(getattr(row, "danceability", 0.5)),
+        "acousticness": float(getattr(row, "acousticness", 0.0)),
+        "instrumentalness": float(getattr(row, "instrumentalness", 0.0)),
+        "speechiness": float(getattr(row, "speechiness", 0.05)),
+        "tempo": float(getattr(row, "tempo", 120.0)),
     }
     return knowledge_service.build_song_profile(
-        title=str(getattr(row, 'track_name', 'Unknown'))[:200],
-        artist=str(getattr(row, 'artists', 'Unknown')).strip("[]'")[:200],
-        genre=str(getattr(row, 'track_genre', 'unknown')),
-        audio_features=features
+        title=str(getattr(row, "track_name", "Unknown"))[:200],
+        artist=str(getattr(row, "artists", "Unknown")).strip("[]'")[:200],
+        genre=str(getattr(row, "track_genre", "unknown")),
+        audio_features=features,
     )
 
 
@@ -91,7 +92,7 @@ def generate_embeddings(df):
     start = time.time()
 
     for i in range(0, len(df), BATCH_SIZE):
-        batch = df.iloc[i:i+BATCH_SIZE]
+        batch = df.iloc[i : i + BATCH_SIZE]
         batch_num = i // BATCH_SIZE + 1
 
         texts = [build_song_text(row) for row in batch.itertuples()]
@@ -101,7 +102,7 @@ def generate_embeddings(df):
         elapsed = time.time() - start
         eta = (elapsed / batch_num) * (total_batches - batch_num) if batch_num > 0 else 0
         if batch_num % 5 == 0 or batch_num == total_batches:
-            print(f"  Batch {batch_num}/{total_batches} | {i+len(batch):,}/{len(df):,} | ETA: {eta:.0f}s")
+            print(f"  Batch {batch_num}/{total_batches} | {i + len(batch):,}/{len(df):,} | ETA: {eta:.0f}s")
 
     return np.vstack(all_embeddings)
 
@@ -114,13 +115,13 @@ def import_to_database(df, embeddings):
         if existing > 0:
             print(f"\nUser {DEMO_USER_ID} has {existing:,} songs.")
             if "--force" in sys.argv or "-y" in sys.argv:
-                resp = 'y'
+                resp = "y"
             else:
                 try:
                     resp = input("Clear and re-import? (y/n): ").strip().lower()
                 except EOFError:
-                    resp = 'n'
-            if resp != 'y':
+                    resp = "n"
+            if resp != "y":
                 print("Aborted.")
                 return 0
             session.query(Song).filter(Song.user_id == DEMO_USER_ID).delete()
@@ -133,18 +134,18 @@ def import_to_database(df, embeddings):
     with Session(engine) as session:
         for idx, row in enumerate(df.itertuples()):
             try:
-                if pd.isna(getattr(row, 'track_name', None)) or pd.isna(getattr(row, 'track_id', None)):
+                if pd.isna(getattr(row, "track_name", None)) or pd.isna(getattr(row, "track_id", None)):
                     skipped += 1
                     continue
 
                 track_id = str(row.track_id)
-                title = str(getattr(row, 'track_name', 'Unknown'))[:200]
-                artist = str(getattr(row, 'artists', 'Unknown')).strip("[]'")[:200]
-                energy = float(getattr(row, 'energy', 0.5))
-                valence = float(getattr(row, 'valence', 0.5))
-                tempo = float(getattr(row, 'tempo', 120))
-                danceability = float(getattr(row, 'danceability', 0.5))
-                duration_ms = float(getattr(row, 'duration_ms', 0))
+                title = str(getattr(row, "track_name", "Unknown"))[:200]
+                artist = str(getattr(row, "artists", "Unknown")).strip("[]'")[:200]
+                energy = float(getattr(row, "energy", 0.5))
+                valence = float(getattr(row, "valence", 0.5))
+                tempo = float(getattr(row, "tempo", 120))
+                danceability = float(getattr(row, "danceability", 0.5))
+                duration_ms = float(getattr(row, "duration_ms", 0))
 
                 mood, confidence, genre = classify_batch(row)
 
@@ -166,10 +167,10 @@ def import_to_database(df, embeddings):
                     lyrics_sentiment=0.0,
                     embedding=json.dumps(embeddings[idx].tolist()),
                     genre=genre,
-                    acousticness=float(getattr(row, 'acousticness', 0.0)),
-                    instrumentalness=float(getattr(row, 'instrumentalness', 0.0)),
-                    speechiness=float(getattr(row, 'speechiness', 0.0)),
-                    liveness=float(getattr(row, 'liveness', 0.0)),
+                    acousticness=float(getattr(row, "acousticness", 0.0)),
+                    instrumentalness=float(getattr(row, "instrumentalness", 0.0)),
+                    speechiness=float(getattr(row, "speechiness", 0.0)),
+                    liveness=float(getattr(row, "liveness", 0.0)),
                 )
                 session.add(song)
                 imported += 1
@@ -178,7 +179,7 @@ def import_to_database(df, embeddings):
                     session.commit()
                     print(f"  Imported {imported:,} songs...")
 
-            except Exception as e:
+            except Exception:
                 skipped += 1
                 continue
 
@@ -199,30 +200,25 @@ def build_faiss_index():
     engine = create_engine(settings.DATABASE_URL)
 
     with Session(engine) as session:
-        songs = session.query(Song).filter(
-            Song.user_id == DEMO_USER_ID,
-            Song.embedding.isnot(None)
-        ).all()
+        songs = session.query(Song).filter(Song.user_id == DEMO_USER_ID, Song.embedding.isnot(None)).all()
 
         if not songs:
             print("No songs with embeddings found.")
             return
 
-        embeddings = np.array([
-            json.loads(s.embedding) for s in songs
-        ]).astype('float32')
+        embeddings = np.array([json.loads(s.embedding) for s in songs]).astype("float32")
 
         dimension = embeddings.shape[1]
         index = faiss.IndexFlatIP(dimension)
         faiss.normalize_L2(embeddings)
         index.add(embeddings)
 
-        index_path = Path(__file__).parent.parent / 'ml' / 'song_index.faiss'
+        index_path = Path(__file__).parent.parent / "ml" / "song_index.faiss"
         faiss.write_index(index, str(index_path))
 
         song_ids = [songs[i].id for i in range(len(songs))]
-        mapping_path = Path(__file__).parent.parent / 'ml' / 'song_id_mapping.json'
-        with open(mapping_path, 'w') as f:
+        mapping_path = Path(__file__).parent.parent / "ml" / "song_id_mapping.json"
+        with open(mapping_path, "w") as f:
             json.dump(song_ids, f)
 
         print(f"FAISS index: {index.ntotal:,} vectors, dim={dimension}")
@@ -251,5 +247,5 @@ def main():
     print(f"Genre clusters: {stats['genre_clusters']}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

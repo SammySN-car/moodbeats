@@ -1,18 +1,21 @@
 import json
+
 import numpy as np
+import requests
 import torch
 import torch.nn.functional as F
+from rank_bm25 import BM25Okapi
+
+from config import settings
 from ml.embedding_service import (
     get_batch_embeddings_tensor,
     get_device,
     neural_cross_rerank,
 )
-from ml.knowledge_service import knowledge_service
 from ml.faiss_service import faiss_service
+from ml.knowledge_service import knowledge_service
 from ml.query_planner import decompose_query, normalize_mood
-from rank_bm25 import BM25Okapi
-from config import settings
-import requests
+
 # typing imports removed - using built-in generics
 
 device = get_device()
@@ -25,10 +28,10 @@ def _repair_json(raw: str) -> dict:
     except json.JSONDecodeError:
         repaired = raw.rstrip()
         if repaired.endswith('"'):
-            repaired += '}'
-        open_braces = repaired.count('{') - repaired.count('}')
-        open_brackets = repaired.count('[') - repaired.count(']')
-        repaired += ']' * open_brackets + '}' * open_braces
+            repaired += "}"
+        open_braces = repaired.count("{") - repaired.count("}")
+        open_brackets = repaired.count("[") - repaired.count("]")
+        repaired += "]" * open_brackets + "}" * open_braces
         try:
             return json.loads(repaired)
         except json.JSONDecodeError:
@@ -36,9 +39,7 @@ def _repair_json(raw: str) -> dict:
 
 
 def reciprocal_rank_fusion(
-    dense_scores: torch.Tensor,
-    sparse_scores: torch.Tensor,
-    k: int = None
+    dense_scores: torch.Tensor, sparse_scores: torch.Tensor, k: int | None = None
 ) -> torch.Tensor:
     """Combine dense and sparse scores using Reciprocal Rank Fusion."""
     if k is None:
@@ -55,10 +56,7 @@ def reciprocal_rank_fusion(
 
 
 def _metadata_filter(
-    library_songs: list,
-    mood: str = None,
-    tempo_range: list = None,
-    energy_range: list = None
+    library_songs: list, mood: str | None = None, tempo_range: list | None = None, energy_range: list | None = None
 ) -> list:
     """Filter library songs by metadata constraints. Songs with missing metadata pass through."""
     normalized_mood = normalize_mood(mood) if mood else None
@@ -69,12 +67,10 @@ def _metadata_filter(
             song_mood = normalize_mood(s.mood)
             if song_mood and song_mood != normalized_mood:
                 continue
-        if tempo_range and s.tempo:
-            if not (tempo_range[0] <= s.tempo <= tempo_range[1]):
-                continue
-        if energy_range and s.energy:
-            if not (energy_range[0] <= s.energy <= energy_range[1]):
-                continue
+        if tempo_range and s.tempo and not (tempo_range[0] <= s.tempo <= tempo_range[1]):
+            continue
+        if energy_range and s.energy and not (energy_range[0] <= s.energy <= energy_range[1]):
+            continue
         filtered_indices.append(i)
 
     return filtered_indices
@@ -84,8 +80,8 @@ def mmr_rerank(
     candidates: list,
     candidate_embeddings: torch.Tensor,
     query_embedding: torch.Tensor,
-    lambda_param: float = None,
-    top_k: int = None
+    lambda_param: float | None = None,
+    top_k: int | None = None,
 ) -> list:
     """Apply Maximal Marginal Relevance to diversify the final playlist."""
     if lambda_param is None:
@@ -105,7 +101,7 @@ def mmr_rerank(
         if not remaining:
             break
 
-        best_score = -float('inf')
+        best_score = -float("inf")
         best_idx = remaining[0]
 
         for idx in remaining:
@@ -133,10 +129,10 @@ def mmr_rerank(
 def hybrid_faiss_rag_search(
     user_prompt: str,
     db_session,
-    user_id: int = None,
-    planner_plan: dict = None,
-    top_k: int = None,
-    taste_vector: list = None
+    user_id: int | None = None,
+    planner_plan: dict | None = None,
+    top_k: int | None = None,
+    taste_vector: list | None = None,
 ) -> list:
     """
     Sub-40ms FAISS-First Hybrid RAG Pipeline:
@@ -157,16 +153,13 @@ def hybrid_faiss_rag_search(
 
     plan = planner_plan or decompose_query(user_prompt)
     hyde = plan.get("hyde_description")
-    if hyde and hyde.strip():
-        query_text = f"{user_prompt}. {hyde.strip()}"
-    else:
-        query_text = user_prompt
+    query_text = f"{user_prompt}. {hyde.strip()}" if hyde and hyde.strip() else user_prompt
     # 1. Compute query vector
     query_tensor = get_batch_embeddings_tensor([query_text])
     if taste_vector is not None:
         taste_tensor = torch.tensor([taste_vector], dtype=torch.float32, device=device)
         query_tensor = (1 - settings.TASTE_WEIGHT) * query_tensor + settings.TASTE_WEIGHT * taste_tensor
-    query_np = query_tensor.cpu().numpy().astype('float32')
+    query_np = query_tensor.cpu().numpy().astype("float32")
 
     # 2. Fast FAISS candidate retrieval
     num_candidates = min(top_k * 3, 60)
@@ -175,7 +168,7 @@ def hybrid_faiss_rag_search(
         return []
 
     candidate_ids = [cid for cid, _ in faiss_matches]
-    faiss_score_map = {cid: score for cid, score in faiss_matches}
+    faiss_score_map = dict(faiss_matches)
 
     # 3. Fetch matching songs from DB with mood filter
     planner_mood = plan.get("mood") if plan else None
@@ -185,7 +178,7 @@ def hybrid_faiss_rag_search(
     if planner_mood:
         query = query.filter(Song.mood == planner_mood)
     candidate_songs = query.all()
-    
+
     # If mood filter too strict, relax it
     if not candidate_songs and planner_mood:
         query = db_session.query(Song).filter(Song.id.in_(candidate_ids))
@@ -201,17 +194,17 @@ def hybrid_faiss_rag_search(
         knowledge_service.build_song_profile(
             title=s.title,
             artist=s.artist,
-            genre=getattr(s, 'genre', 'pop') or 'pop',
+            genre=getattr(s, "genre", "pop") or "pop",
             audio_features={
-                'energy': s.energy or 0.5,
-                'valence': s.valence or 0.5,
-                'tempo': s.tempo or 120.0,
-                'danceability': s.danceability or 0.5,
-                'acousticness': getattr(s, 'acousticness', 0.0) or 0.0,
-                'instrumentalness': getattr(s, 'instrumentalness', 0.0) or 0.0,
-                'speechiness': getattr(s, 'speechiness', 0.0) or 0.0,
+                "energy": s.energy or 0.5,
+                "valence": s.valence or 0.5,
+                "tempo": s.tempo or 120.0,
+                "danceability": s.danceability or 0.5,
+                "acousticness": getattr(s, "acousticness", 0.0) or 0.0,
+                "instrumentalness": getattr(s, "instrumentalness", 0.0) or 0.0,
+                "speechiness": getattr(s, "speechiness", 0.0) or 0.0,
             },
-            lyrics_sentiment=getattr(s, 'lyrics_sentiment', 0.0) or 0.0,
+            lyrics_sentiment=getattr(s, "lyrics_sentiment", 0.0) or 0.0,
         )
         for s in candidate_songs
     ]
@@ -234,9 +227,9 @@ def hybrid_faiss_rag_search(
 def pytorch_database_rag_search(
     user_prompt: str,
     library_songs: list,
-    planner_plan: dict = None,
-    top_k: int = None,
-    taste_vector: list = None
+    planner_plan: dict | None = None,
+    top_k: int | None = None,
+    taste_vector: list | None = None,
 ) -> list:
     """Hybrid RAG search: Dense + Sparse -> RRF Fusion -> Cross-Encoder Rerank -> MMR."""
     if top_k is None:
@@ -246,19 +239,13 @@ def pytorch_database_rag_search(
         return []
 
     # Build planner context if available
-    if planner_plan is None:
-        plan = decompose_query(user_prompt)
-    else:
-        plan = planner_plan
+    plan = decompose_query(user_prompt) if planner_plan is None else planner_plan
 
     # Use HyDE description if available, otherwise fall back to raw query
     embedding_query = plan["hyde_description"] if plan["hyde_description"] else user_prompt
     # Pre-filter by metadata before expensive vector search
     filter_indices = _metadata_filter(
-        library_songs,
-        mood=plan.get("mood"),
-        tempo_range=plan.get("tempo_range"),
-        energy_range=plan.get("energy_range")
+        library_songs, mood=plan.get("mood"), tempo_range=plan.get("tempo_range"), energy_range=plan.get("energy_range")
     )
 
     if len(filter_indices) == 0:
@@ -270,19 +257,19 @@ def pytorch_database_rag_search(
 
     lib_docs = []
     for s in filtered_songs:
-        if getattr(s, 'embedding', None):
+        if getattr(s, "embedding", None):
             doc = f"Track: '{s.title}' by {s.artist}. Mood: {s.mood}. Tempo: {s.tempo} BPM. Energy: {s.energy}."
         else:
             doc = knowledge_service.build_song_profile(
                 title=s.title,
                 artist=s.artist,
-                genre=getattr(s, 'genre', '') or '',
-                mood=s.mood or 'chill',
+                genre=getattr(s, "genre", "") or "",
+                mood=s.mood or "chill",
                 tempo=s.tempo or 120.0,
                 energy=s.energy or 0.5,
                 danceability=s.danceability or 0.5,
                 valence=s.valence or 0.5,
-                lyrics_sentiment=getattr(s, 'lyrics_sentiment', 0.0) or 0.0,
+                lyrics_sentiment=getattr(s, "lyrics_sentiment", 0.0) or 0.0,
             )
         lib_docs.append(doc)
 
@@ -295,11 +282,10 @@ def pytorch_database_rag_search(
         weight = settings.TASTE_WEIGHT
         prompt_tensor = (1 - weight) * prompt_tensor + weight * taste_tensor
 
-    if all(getattr(s, 'embedding', None) for s in filtered_songs):
+    if all(getattr(s, "embedding", None) for s in filtered_songs):
         try:
             lib_vectors = torch.tensor(
-                [json.loads(s.embedding) for s in filtered_songs],
-                dtype=torch.float32, device=device
+                [json.loads(s.embedding) for s in filtered_songs], dtype=torch.float32, device=device
             )
         except Exception:
             lib_vectors = get_batch_embeddings_tensor(lib_docs)
@@ -316,10 +302,7 @@ def pytorch_database_rag_search(
 
     if tokenized_corpus:
         bm25 = BM25Okapi(tokenized_corpus)
-        sparse_scores = torch.tensor(
-            bm25.get_scores(tokenized_query),
-            dtype=torch.float32, device=device
-        )
+        sparse_scores = torch.tensor(bm25.get_scores(tokenized_query), dtype=torch.float32, device=device)
     else:
         sparse_scores = torch.zeros(len(filtered_songs), device=device)
 
@@ -350,10 +333,7 @@ def pytorch_database_rag_search(
     # 60% cross-encoder + 40% rank fusion
     combined = 0.6 * cross_scores_normalized + 0.4 * rrf_normalized
 
-    candidates = [
-        (combined[j].item(), filtered_songs[rrf_top_indices[j]])
-        for j in range(len(rrf_top_indices))
-    ]
+    candidates = [(combined[j].item(), filtered_songs[rrf_top_indices[j]]) for j in range(len(rrf_top_indices))]
     candidates.sort(key=lambda x: x[0], reverse=True)
 
     # MMR diversity reranking
@@ -362,13 +342,13 @@ def pytorch_database_rag_search(
         knowledge_service.build_song_profile(
             title=s.title,
             artist=s.artist,
-            genre=getattr(s, 'genre', '') or '',
-            mood=s.mood or 'chill',
+            genre=getattr(s, "genre", "") or "",
+            mood=s.mood or "chill",
             tempo=s.tempo or 120.0,
             energy=s.energy or 0.5,
             danceability=s.danceability or 0.5,
             valence=s.valence or 0.5,
-            lyrics_sentiment=getattr(s, 'lyrics_sentiment', 0.0) or 0.0,
+            lyrics_sentiment=getattr(s, "lyrics_sentiment", 0.0) or 0.0,
         )
         for s in candidate_songs
     ]
@@ -405,10 +385,7 @@ def enrich_discovered_songs(new_songs: list) -> list:
 
 
 def generate_ai_dj_synthesis(
-    user_prompt: str,
-    ranked_songs: list,
-    planner_plan: dict = None,
-    max_songs: int = None
+    user_prompt: str, ranked_songs: list, planner_plan: dict | None = None, max_songs: int | None = None
 ) -> dict:
     """Use Ollama to generate a curated playlist with per-track explanations."""
     if max_songs is None:
@@ -439,9 +416,9 @@ Respond in JSON:
                     "prompt": fallback_prompt,
                     "format": "json",
                     "stream": False,
-                    "options": {"num_predict": 1000, "temperature": 0.4}
+                    "options": {"num_predict": 1000, "temperature": 0.4},
                 },
-                timeout=settings.OLLAMA_TIMEOUT_SECONDS
+                timeout=settings.OLLAMA_TIMEOUT_SECONDS,
             )
             if resp.status_code == 200:
                 raw = resp.json().get("response", "{}")
@@ -453,33 +430,33 @@ Respond in JSON:
                     "new_song_recommendations": curation.get("new_song_recommendations", []),
                     "track_explanations": {},
                     "quality_score": curation.get("quality_score", 5),
-                    "quality_notes": curation.get("quality_notes", "")
+                    "quality_notes": curation.get("quality_notes", ""),
                 }
         except Exception as e:
             print(f"[AI DJ] Fallback Ollama call failed: {e}")
 
         return {
             "playlist_title": f"Playlist: {user_prompt}",
-            "ai_dj_note": f"No matching songs in your library. Here are some suggestions!",
+            "ai_dj_note": "No matching songs in your library. Here are some suggestions!",
             "ordered_library_ids": [],
             "new_song_recommendations": [],
             "track_explanations": {},
             "quality_score": 0,
-            "quality_notes": "No songs to curate."
+            "quality_notes": "No songs to curate.",
         }
 
     song_context = ""
     for i, (score, song) in enumerate(ranked_songs[:max_songs]):
-        song_context += f"\n{i+1}. \"{song.title}\" by {song.artist} | Mood: {song.mood} | BPM: {song.tempo:.0f} | Energy: {song.energy:.2f} | Relevance: {score:.4f}"
+        song_context += f'\n{i + 1}. "{song.title}" by {song.artist} | Mood: {song.mood} | BPM: {song.tempo:.0f} | Energy: {song.energy:.2f} | Relevance: {score:.4f}'
 
     planner_context = ""
     if planner_plan:
         planner_context = f"""
 Search plan:
-- Mood: {planner_plan.get('mood', 'any')}
-- Tempo: {planner_plan.get('tempo_range', [0, 200])}
-- Energy: {planner_plan.get('energy_range', [0.0, 1.0])}
-- Keywords: {', '.join(planner_plan.get('keywords', []))}
+- Mood: {planner_plan.get("mood", "any")}
+- Tempo: {planner_plan.get("tempo_range", [0, 200])}
+- Energy: {planner_plan.get("energy_range", [0.0, 1.0])}
+- Keywords: {", ".join(planner_plan.get("keywords", []))}
 """
 
     dj_prompt = f"""You are MoodBeats AI DJ. Curate a playlist from the user's library based on their vibe request.
@@ -518,12 +495,9 @@ Respond in JSON:
                 "prompt": dj_prompt,
                 "format": "json",
                 "stream": False,
-                "options": {
-                    "num_predict": 1500,
-                    "temperature": 0.4
-                }
+                "options": {"num_predict": 1500, "temperature": 0.4},
             },
-            timeout=settings.OLLAMA_TIMEOUT_SECONDS
+            timeout=settings.OLLAMA_TIMEOUT_SECONDS,
         )
 
         if resp.status_code == 200:
@@ -537,7 +511,7 @@ Respond in JSON:
                 "new_song_recommendations": curation.get("new_song_recommendations", []),
                 "track_explanations": curation.get("track_explanations", {}),
                 "quality_score": curation.get("quality_score"),
-                "quality_notes": curation.get("quality_notes")
+                "quality_notes": curation.get("quality_notes"),
             }
 
             # Ensure types: ordered_library_ids must be ints, track_explanations keys must be strings
@@ -557,6 +531,5 @@ Respond in JSON:
         "new_song_recommendations": [],
         "track_explanations": {},
         "quality_score": None,
-        "quality_notes": "AI DJ unavailable - using raw RAG ranking."
+        "quality_notes": "AI DJ unavailable - using raw RAG ranking.",
     }
-

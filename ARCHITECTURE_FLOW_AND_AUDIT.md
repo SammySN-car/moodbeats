@@ -1,5 +1,8 @@
 # MoodBeats — System Architecture, Flow Evolution & Optimization Audit (v5.2)
 
+> **STATUS (2026-09-30)**: This document is a historical v5.2 audit snapshot. Current source of truth: **`MOODBEATS_AI_CONTEXT.md` (v6.1)**.
+> Changes since this audit: RRF fusion + MMR diversity replaced the 0.65/0.35 weighted sum; Ollama query planner (HyDE) added; knowledge base grew to 114K tracks with FAISS (89,740 vectors); `mood_classifier.py` replaced by `knowledge_service.py` + `scripts/genre_classifier.py`; frontend reorganized into `features/` modules with playlist detail pages; Spotify import now creates missing songs locally (Audio Features API deprecated).
+
 > **Document Version**: 5.2 (Production Architecture: PyTorch Hybrid RAG + Dual-Stream Audio Player)  
 > **Date**: 2026-08-30  
 > **Core Focus**: Auditing the database-driven PyTorch tensor search engine, BM25 lexical fusion, HuggingFace Cross-Encoder neural reranker, verified official audio stream resolver, zero-duplicate filtering engine, and calm full-width UI.

@@ -1,17 +1,18 @@
 from typing import Any, cast
+
 from transformers import pipeline
 
 _sentiment_pipeline = None
+
 
 def get_sentiment_pipeline():
     global _sentiment_pipeline
     if _sentiment_pipeline is None:
         _sentiment_pipeline = cast(Any, pipeline)(
-            "sentiment-analysis",
-            model="distilbert-base-uncased-finetuned-sst-2-english",
-            device=-1
+            "sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english", device=-1
         )
     return _sentiment_pipeline
+
 
 def analyze_sentiment(text: str) -> float:
     if not text or len(text.strip()) < 15:

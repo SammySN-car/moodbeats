@@ -1,34 +1,32 @@
 import json
 import re
 import traceback
-from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+from config import settings
 from database import get_db
-from models import Playlist, PlaylistItem, Song, User
-from schemas import PlaylistCreate, PlaylistResponse, MoodPromptRequest, SuggestedSong
-from utils.auth import get_current_user
 from ml.embedding_service import get_text_embedding_tensor
+from ml.faiss_service import faiss_service
 from ml.knowledge_service import knowledge_service
+from ml.query_planner import decompose_query
 from ml.rag_playlist_generator import (
+    enrich_discovered_songs,
+    generate_ai_dj_synthesis,
     hybrid_faiss_rag_search,
     pytorch_database_rag_search,
-    enrich_discovered_songs,
-    generate_ai_dj_synthesis
 )
-from ml.faiss_service import faiss_service
-from ml.query_planner import decompose_query
-from config import settings
+from models import Playlist, PlaylistItem, Song, User
+from schemas import MoodPromptRequest, PlaylistCreate, PlaylistResponse, SuggestedSong
+from utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/playlists", tags=["Playlists"])
 
+
 @router.get("", response_model=list[PlaylistResponse])
-def list_playlists(
-    limit: int = 20,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def list_playlists(limit: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """List the user's previously generated playlists."""
     playlists = (
         db.query(Playlist)
@@ -50,46 +48,38 @@ def list_playlists(
             continue
     return result
 
+
 @router.get("/{playlist_id}", response_model=PlaylistResponse)
-def get_playlist(
-    playlist_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def get_playlist(playlist_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get a single playlist with all its tracks."""
-    pl = db.query(Playlist).filter(
-        Playlist.id == playlist_id,
-        Playlist.user_id == current_user.id
-    ).first()
+    pl = db.query(Playlist).filter(Playlist.id == playlist_id, Playlist.user_id == current_user.id).first()
     if not pl:
         raise HTTPException(status_code=404, detail="Playlist not found")
     valid_items = [item for item in pl.items if item.song is not None]
     pl.items = valid_items
     return PlaylistResponse.model_validate(pl)
 
+
 @router.post("", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)
 def create_playlist(
-    data: PlaylistCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    data: PlaylistCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Create a playlist from a list of song IDs."""
     if data.song_ids:
-        user_song_ids = set(
-            s.id for s in db.query(Song.id).filter(
-                Song.id.in_(data.song_ids),
-                Song.user_id == current_user.id
-            ).all()
-        )
+        user_song_ids = {
+            s.id for s in db.query(Song.id).filter(Song.id.in_(data.song_ids), Song.user_id == current_user.id).all()
+        }
         invalid_ids = [sid for sid in data.song_ids if sid not in user_song_ids]
         if invalid_ids:
-            raise HTTPException(status_code=400, detail=f"Invalid song IDs: {invalid_ids}. You can only add your own songs.")
-    
+            raise HTTPException(
+                status_code=400, detail=f"Invalid song IDs: {invalid_ids}. You can only add your own songs."
+            )
+
     new_playlist = Playlist(user_id=current_user.id, name=data.name, is_auto=False)
     db.add(new_playlist)
     db.commit()
     db.refresh(new_playlist)
-    
+
     for idx, song_id in enumerate(data.song_ids):
         item = PlaylistItem(playlist_id=new_playlist.id, song_id=song_id, position=idx + 1)
         db.add(item)
@@ -99,34 +89,23 @@ def create_playlist(
 
 
 @router.delete("/{playlist_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_playlist(
-    playlist_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def delete_playlist(playlist_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a playlist."""
-    playlist = db.query(Playlist).filter(
-        Playlist.id == playlist_id,
-        Playlist.user_id == current_user.id
-    ).first()
+    playlist = db.query(Playlist).filter(Playlist.id == playlist_id, Playlist.user_id == current_user.id).first()
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
     db.delete(playlist)
     db.commit()
 
+
 @router.post("/generate", response_model=PlaylistResponse, status_code=status.HTTP_201_CREATED)
 def generate_mood_playlist(
-    payload: MoodPromptRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    payload: MoodPromptRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     try:
         user_songs = db.query(Song).filter(Song.user_id == current_user.id).all()
 
-        if settings.PLANNER_ENABLED:
-            plan = decompose_query(payload.prompt)
-        else:
-            plan = None
+        plan = decompose_query(payload.prompt) if settings.PLANNER_ENABLED else None
 
         # Load user taste vector if available
         taste_vec = None
@@ -139,10 +118,9 @@ def generate_mood_playlist(
         ranked_lib_songs = []
         if faiss_service.is_loaded:
             ranked_lib_songs = hybrid_faiss_rag_search(
-                payload.prompt, db, user_id=current_user.id,
-                planner_plan=plan, taste_vector=taste_vec
+                payload.prompt, db, user_id=current_user.id, planner_plan=plan, taste_vector=taste_vec
             )
-        
+
         # Resilient fallback if FAISS is unbuilt or returns empty
         if not ranked_lib_songs:
             ranked_lib_songs = pytorch_database_rag_search(
@@ -158,7 +136,7 @@ def generate_mood_playlist(
             name=curation.get("playlist_title", "AI Curated Playlist"),
             description=curation.get("ai_dj_note", f"Vibe: {payload.prompt}"),
             source_prompt=payload.prompt,
-            is_auto=True
+            is_auto=True,
         )
         db.add(new_playlist)
         db.commit()
@@ -184,7 +162,7 @@ def generate_mood_playlist(
 
         for idx, sid in enumerate(ordered_ids):
             if sid in lib_song_map:
-                item = PlaylistItem(playlist_id=new_playlist.id, song_id=sid, position=idx+1)
+                item = PlaylistItem(playlist_id=new_playlist.id, song_id=sid, position=idx + 1)
                 db.add(item)
 
         db.commit()
@@ -196,14 +174,17 @@ def generate_mood_playlist(
         response.quality_score = curation.get("quality_score")
         response.quality_notes = curation.get("quality_notes")
         return response
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
         raise
 
+
 # --- Spotify Playlist Import ---
+
 
 class SpotifyImportRequest(BaseModel):
     spotify_url: str = Field(..., description="Spotify playlist URL")
+
 
 class SpotifyImportResponse(BaseModel):
     playlist_id: int
@@ -212,14 +193,14 @@ class SpotifyImportResponse(BaseModel):
     imported_new: int
     linked_existing: int
     failed: int
-    failed_samples: List[str] = Field(default_factory=list)
+    failed_samples: list[str] = Field(default_factory=list)
 
 
 def parse_spotify_playlist_id(url: str) -> str:
     """Extract playlist ID from Spotify URL."""
     patterns = [
-        r'spotify\.com/(?:embed/)?playlist/([a-zA-Z0-9]{22})',
-        r'spotify:playlist:([a-zA-Z0-9]{22})',
+        r"spotify\.com/(?:embed/)?playlist/([a-zA-Z0-9]{22})",
+        r"spotify:playlist:([a-zA-Z0-9]{22})",
     ]
     for pat in patterns:
         m = re.search(pat, url)
@@ -231,36 +212,38 @@ def parse_spotify_playlist_id(url: str) -> str:
 def _upsert_song_from_spotify(db: Session, user_id: int, track_data: dict) -> Song:
     """Find or create a Song from Spotify track data."""
     spotify_id = track_data["spotify_id"]
-    
-    existing = db.query(Song).filter(
-        Song.user_id == user_id,
-        Song.spotify_id == spotify_id
-    ).first()
+
+    existing = db.query(Song).filter(Song.user_id == user_id, Song.spotify_id == spotify_id).first()
     if existing:
         return existing
-    
+
     from utils.spotify import extract_audio_features_from_preview
+
     preview_url = track_data.get("preview_url")
     tempo, energy, danceability, valence = extract_audio_features_from_preview(preview_url)
-    
-    genre = knowledge_service.classify_genre_from_features({
-        "tempo": tempo,
-        "energy": energy,
-        "danceability": danceability,
-        "valence": valence,
-        "acousticness": track_data.get("acousticness", 0.3),
-        "instrumentalness": track_data.get("instrumentalness", 0.0),
-        "speechiness": track_data.get("speechiness", 0.05),
-        "liveness": track_data.get("liveness", 0.2),
-    })
-    
-    mood, mood_confidence, _ = knowledge_service.classify_mood_from_features({
-        "tempo": tempo,
-        "energy": energy,
-        "danceability": danceability,
-        "valence": valence,
-    })
-    
+
+    genre = knowledge_service.classify_genre_from_features(
+        {
+            "tempo": tempo,
+            "energy": energy,
+            "danceability": danceability,
+            "valence": valence,
+            "acousticness": track_data.get("acousticness", 0.3),
+            "instrumentalness": track_data.get("instrumentalness", 0.0),
+            "speechiness": track_data.get("speechiness", 0.05),
+            "liveness": track_data.get("liveness", 0.2),
+        }
+    )
+
+    mood, mood_confidence, _ = knowledge_service.classify_mood_from_features(
+        {
+            "tempo": tempo,
+            "energy": energy,
+            "danceability": danceability,
+            "valence": valence,
+        }
+    )
+
     profile_text = knowledge_service.build_song_profile(
         title=track_data["title"],
         artist=track_data["artist"],
@@ -273,8 +256,9 @@ def _upsert_song_from_spotify(db: Session, user_id: int, track_data: dict) -> So
         lyrics_sentiment=0.0,
     )
     embedding_vec = get_text_embedding_tensor(profile_text)
-    
+
     import json as _json
+
     new_song = Song(
         user_id=user_id,
         title=track_data["title"],
@@ -300,9 +284,7 @@ def _upsert_song_from_spotify(db: Session, user_id: int, track_data: dict) -> So
 
 @router.post("/import-spotify", response_model=SpotifyImportResponse)
 def import_spotify_playlist(
-    payload: SpotifyImportRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    payload: SpotifyImportRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Import a public Spotify playlist into MoodBeats.
     For each track:
@@ -313,17 +295,15 @@ def import_spotify_playlist(
     try:
         playlist_id_str = parse_spotify_playlist_id(payload.spotify_url)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
         from spotify_scraper import SpotifyClient
+
         with SpotifyClient() as client:
-            sp_playlist = client.get_playlist(
-                f"https://open.spotify.com/playlist/{playlist_id_str}",
-                max_tracks=None
-            )
+            sp_playlist = client.get_playlist(f"https://open.spotify.com/playlist/{playlist_id_str}", max_tracks=None)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch Spotify playlist: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch Spotify playlist: {e!s}") from e
 
     if not sp_playlist or not sp_playlist.tracks:
         raise HTTPException(status_code=404, detail="Playlist not found or is empty")
@@ -352,7 +332,7 @@ def import_spotify_playlist(
 
         album_art = None
         if t.images:
-            album_art = t.images[0].url if hasattr(t.images[0], 'url') else str(t.images[0])
+            album_art = t.images[0].url if hasattr(t.images[0], "url") else str(t.images[0])
 
         track_data = {
             "spotify_id": spotify_track_id,
@@ -382,12 +362,13 @@ def import_spotify_playlist(
             # Strategy 3: fuzzy match
             found = False
             for (db_title, db_artist), db_song in existing_by_title_artist.items():
-                if title.lower() in db_title or db_title in title.lower():
-                    if primary_artist in db_artist or db_artist in primary_artist:
-                        playlist_song_ids.append(db_song.id)
-                        linked_existing += 1
-                        found = True
-                        break
+                if (title.lower() in db_title or db_title in title.lower()) and (
+                    primary_artist in db_artist or db_artist in primary_artist
+                ):
+                    playlist_song_ids.append(db_song.id)
+                    linked_existing += 1
+                    found = True
+                    break
             if found:
                 continue
 
@@ -417,7 +398,7 @@ def import_spotify_playlist(
         name=sp_playlist.name or "Imported Playlist",
         description=f"Imported from Spotify by {sp_playlist.owner.name if sp_playlist.owner else 'Unknown'}",
         source_prompt=f"spotify:{playlist_id_str}",
-        is_auto=False
+        is_auto=False,
     )
     db.add(new_playlist)
     db.commit()
@@ -436,5 +417,5 @@ def import_spotify_playlist(
         imported_new=imported_new,
         linked_existing=linked_existing,
         failed=failed,
-        failed_samples=failed_samples
+        failed_samples=failed_samples,
     )
