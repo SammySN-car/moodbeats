@@ -106,8 +106,8 @@ npm run dev
 
 ### Ollama (optional, for AI DJ)
 
-```bash
-ollama pull llama3.2
+The command executes the Ollama pull function. It downloads the llama3.2 model to the local system. This makes the model available for use.
+
 # Runs on localhost:11434 by default
 ```
 
